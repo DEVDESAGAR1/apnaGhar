@@ -22,7 +22,9 @@ import {
   Trash2, 
   Copy, 
   CheckCircle, 
-  Compass
+  Compass,
+  Undo2,
+  Redo2
 } from 'lucide-react';
 
 interface Canvas2DProps {
@@ -57,6 +59,27 @@ export const Canvas2D: React.FC<Canvas2DProps> = ({
   const [isPanning, setIsPanning] = useState(false);
   const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [itemInitialPos, setItemInitialPos] = useState<{ x: number; y: number; rotation: number }>({ x: 0, y: 0, rotation: 0 });
+  const initialFurnitureRef = useRef<FurnitureItem[]>(furniture);
+
+  // Undo / Redo History Stack
+  const [undoStack, setUndoStack] = useState<FurnitureItem[][]>([]);
+  const [redoStack, setRedoStack] = useState<FurnitureItem[][]>([]);
+
+  const handleUndo = useCallback(() => {
+    if (undoStack.length === 0) return;
+    const previous = undoStack[undoStack.length - 1];
+    setUndoStack(prev => prev.slice(0, -1));
+    setRedoStack(prev => [...prev, furniture]);
+    onUpdateFurniture(previous);
+  }, [undoStack, furniture, onUpdateFurniture]);
+
+  const handleRedo = useCallback(() => {
+    if (redoStack.length === 0) return;
+    const next = redoStack[redoStack.length - 1];
+    setRedoStack(prev => prev.slice(0, -1));
+    setUndoStack(prev => [...prev, furniture]);
+    onUpdateFurniture(next);
+  }, [redoStack, furniture, onUpdateFurniture]);
 
   const selectedItem = furniture.find(f => f.id === selectedItemId) || null;
 
@@ -481,6 +504,7 @@ export const Canvas2D: React.FC<Canvas2DProps> = ({
 
     // Check if clicking on rotation handle of selected item
     if (selectedItem && isOverRotationHandle(roomCoords.x, roomCoords.y, selectedItem)) {
+      initialFurnitureRef.current = [...furniture];
       setIsRotating(true);
       setDragStartPos({ x: clientX, y: clientY });
       setItemInitialPos({ x: selectedItem.x, y: selectedItem.y, rotation: selectedItem.rotation });
@@ -490,6 +514,7 @@ export const Canvas2D: React.FC<Canvas2DProps> = ({
     // Check if clicking on any furniture item
     const clickedItem = findItemAtPoint(roomCoords.x, roomCoords.y);
     if (clickedItem) {
+      initialFurnitureRef.current = [...furniture];
       onSelectItem(clickedItem);
       setIsDraggingItem(true);
       setDragStartPos({ x: roomCoords.x, y: roomCoords.y });
@@ -565,6 +590,10 @@ export const Canvas2D: React.FC<Canvas2DProps> = ({
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (isDraggingItem || isRotating) {
+      setUndoStack(prev => [...prev.slice(-20), initialFurnitureRef.current]);
+      setRedoStack([]);
+    }
     setIsDraggingItem(false);
     setIsRotating(false);
     setIsPanning(false);
@@ -601,6 +630,22 @@ export const Canvas2D: React.FC<Canvas2DProps> = ({
         return;
       }
 
+      // Undo / Redo keyboard shortcuts
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          handleRedo();
+        } else {
+          handleUndo();
+        }
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
+
       if (!selectedItem) {
         if (e.key === 'Tab' && furniture.length > 0) {
           e.preventDefault();
@@ -630,6 +675,8 @@ export const Canvas2D: React.FC<Canvas2DProps> = ({
         onUpdateFurniture(furniture.map(f => f.id === selectedItem.id ? { ...f, rotation: newRot } : f));
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
+        setUndoStack(prev => [...prev.slice(-20), furniture]);
+        setRedoStack([]);
         onUpdateFurniture(furniture.filter(f => f.id !== selectedItem.id));
         onSelectItem(null);
       } else if (e.key === 'Tab') {
@@ -644,17 +691,21 @@ export const Canvas2D: React.FC<Canvas2DProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedItem, furniture, onUpdateFurniture, onSelectItem]);
+  }, [selectedItem, furniture, onUpdateFurniture, onSelectItem, handleUndo, handleRedo]);
 
   // Quick Action Helpers
   const handleRotateQuarter = () => {
     if (!selectedItem) return;
+    setUndoStack(prev => [...prev.slice(-20), furniture]);
+    setRedoStack([]);
     const newRot = (selectedItem.rotation + 90) % 360;
     onUpdateFurniture(furniture.map(f => f.id === selectedItem.id ? { ...f, rotation: newRot } : f));
   };
 
   const handleDuplicate = () => {
     if (!selectedItem) return;
+    setUndoStack(prev => [...prev.slice(-20), furniture]);
+    setRedoStack([]);
     const copyItem: FurnitureItem = {
       ...selectedItem,
       id: `item-${Date.now()}`,
@@ -668,6 +719,8 @@ export const Canvas2D: React.FC<Canvas2DProps> = ({
 
   const handleDelete = () => {
     if (!selectedItem) return;
+    setUndoStack(prev => [...prev.slice(-20), furniture]);
+    setRedoStack([]);
     onUpdateFurniture(furniture.filter(f => f.id !== selectedItem.id));
     onSelectItem(null);
   };
@@ -706,7 +759,7 @@ export const Canvas2D: React.FC<Canvas2DProps> = ({
         }}
       />
 
-      {/* Floating View Controls (Zoom, Fit, Compass) */}
+      {/* Floating View Controls (Undo, Redo, Zoom, Fit) */}
       <div style={{
         position: 'absolute',
         top: '16px',
@@ -717,6 +770,25 @@ export const Canvas2D: React.FC<Canvas2DProps> = ({
         zIndex: 20,
       }}>
         <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', padding: '4px' }}>
+          <button 
+            onClick={handleUndo} 
+            disabled={undoStack.length === 0}
+            className="btn btn-ghost btn-icon" 
+            style={{ opacity: undoStack.length === 0 ? 0.35 : 1 }}
+            title="Undo (Ctrl+Z)"
+          >
+            <Undo2 size={16} />
+          </button>
+          <button 
+            onClick={handleRedo} 
+            disabled={redoStack.length === 0}
+            className="btn btn-ghost btn-icon" 
+            style={{ opacity: redoStack.length === 0 ? 0.35 : 1 }}
+            title="Redo (Ctrl+Y)"
+          >
+            <Redo2 size={16} />
+          </button>
+          <div style={{ height: '1px', background: 'var(--border-subtle)', margin: '3px 0' }} />
           <button 
             onClick={() => setZoom(z => Math.min(z * 1.2, 5.0))} 
             className="btn btn-ghost btn-icon" 
@@ -741,7 +813,7 @@ export const Canvas2D: React.FC<Canvas2DProps> = ({
         </div>
       </div>
 
-      {/* Mini Compass / Orientation Indicator */}
+      {/* Mini Compass / Room Indicator */}
       <div style={{
         position: 'absolute',
         top: '16px',
@@ -758,8 +830,8 @@ export const Canvas2D: React.FC<Canvas2DProps> = ({
           fontWeight: 600,
           color: 'var(--text-muted)',
         }}>
-          <Compass size={14} className="text-sky-400" />
-          <span>North Wall (Top)</span>
+          <Compass size={14} className="text-terracotta" />
+          <span>{room.name} ({room.width}×{room.length} cm)</span>
         </div>
       </div>
 

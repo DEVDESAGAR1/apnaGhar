@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import type { FitProject, FitReport, UnitType } from '../../types/model';
+import type { HomeProject, FitReport, UnitType } from '../../types/model';
 import { 
   exportProjectJson, 
   importProjectJson, 
-  createSampleDemoProject 
+  createSampleHomeProject 
 } from '../../utils/storage';
 import { formatDimension } from '../../utils/units';
 import { 
@@ -13,16 +13,17 @@ import {
   ShieldCheck, 
   Check, 
   Copy, 
-  Printer 
+  Printer,
+  Home
 } from 'lucide-react';
 
 interface ExportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  project: FitProject;
+  project: HomeProject;
   fitReport: FitReport;
   displayUnit: UnitType;
-  onLoadProject: (newProject: FitProject) => void;
+  onLoadProject: (newProject: HomeProject) => void;
 }
 
 export const ExportModal: React.FC<ExportModalProps> = ({
@@ -35,7 +36,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 }) => {
   const [includePhoto, setIncludePhoto] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<'export' | 'import' | 'report' | 'demos'>('export');
+  const [activeTab, setActiveTab] = useState<'export' | 'report' | 'import' | 'demos'>('export');
 
   if (!isOpen) return null;
 
@@ -45,7 +46,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${project.name.toLowerCase().replace(/\s+/g, '-')}-plan.fitcheck.json`;
+    a.download = `${project.name.toLowerCase().replace(/\s+/g, '-')}-apnaghar.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -79,12 +80,18 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     window.print();
   };
 
+  // Compute aggregate home statistics
+  const totalAreaSqM = Math.round(
+    project.rooms.reduce((acc, r) => acc + (r.width * r.length) / 10000, 0) * 10
+  ) / 10;
+  const totalFurnitureCount = project.rooms.reduce((acc, r) => acc + (r.furniture?.length || 0), 0);
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div 
         className="modal-content" 
         onClick={e => e.stopPropagation()}
-        style={{ width: 'min(92vw, 680px)', height: 'min(88vh, 760px)' }}
+        style={{ width: 'min(92vw, 720px)', height: 'min(88vh, 800px)' }}
       >
         {/* Header */}
         <div style={{
@@ -95,9 +102,15 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           borderBottom: '1px solid var(--border-subtle)',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>
-              Export, Share & Demo Plans
-            </h2>
+            <Home size={20} className="text-terracotta" />
+            <div>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, letterSpacing: '-0.01em' }}>
+                Export, Share & Printable Reports
+              </h2>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
+                ApnaGhar (अपना घर) — Privacy-Preserving Home Planning
+              </p>
+            </div>
           </div>
           <button onClick={onClose} className="btn btn-ghost btn-icon">
             <X size={18} />
@@ -117,23 +130,25 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             className="btn btn-ghost"
             style={{
               fontSize: '0.8rem',
-              padding: '6px 12px',
+              padding: '6px 14px',
               borderRadius: 'var(--radius-sm)',
-              background: activeTab === 'export' ? 'var(--primary)' : 'transparent',
+              background: activeTab === 'export' ? 'var(--primary-clay)' : 'transparent',
               color: activeTab === 'export' ? '#fff' : 'var(--text-muted)',
+              fontWeight: activeTab === 'export' ? 600 : 400,
             }}
           >
-            Export Plan
+            Export Project
           </button>
           <button
             onClick={() => setActiveTab('report')}
             className="btn btn-ghost"
             style={{
               fontSize: '0.8rem',
-              padding: '6px 12px',
+              padding: '6px 14px',
               borderRadius: 'var(--radius-sm)',
-              background: activeTab === 'report' ? 'var(--primary)' : 'transparent',
+              background: activeTab === 'report' ? 'var(--primary-clay)' : 'transparent',
               color: activeTab === 'report' ? '#fff' : 'var(--text-muted)',
+              fontWeight: activeTab === 'report' ? 600 : 400,
             }}
           >
             Printable Report
@@ -143,10 +158,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             className="btn btn-ghost"
             style={{
               fontSize: '0.8rem',
-              padding: '6px 12px',
+              padding: '6px 14px',
               borderRadius: 'var(--radius-sm)',
-              background: activeTab === 'import' ? 'var(--primary)' : 'transparent',
+              background: activeTab === 'import' ? 'var(--primary-clay)' : 'transparent',
               color: activeTab === 'import' ? '#fff' : 'var(--text-muted)',
+              fontWeight: activeTab === 'import' ? 600 : 400,
             }}
           >
             Import File
@@ -156,68 +172,78 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             className="btn btn-ghost"
             style={{
               fontSize: '0.8rem',
-              padding: '6px 12px',
+              padding: '6px 14px',
               borderRadius: 'var(--radius-sm)',
-              background: activeTab === 'demos' ? 'var(--primary)' : 'transparent',
+              background: activeTab === 'demos' ? 'var(--primary-clay)' : 'transparent',
               color: activeTab === 'demos' ? '#fff' : 'var(--text-muted)',
+              fontWeight: activeTab === 'demos' ? 600 : 400,
             }}
           >
-            Demo Rooms
+            Home Templates
           </button>
         </div>
 
+        {/* Tab Content */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
           {activeTab === 'export' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              {/* Privacy Notice Box */}
-              <div className="glass-panel" style={{ padding: '14px', borderColor: 'rgba(16, 185, 129, 0.35)', background: 'rgba(16, 185, 129, 0.06)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#34d399', fontWeight: 600, fontSize: '0.875rem' }}>
-                  <ShieldCheck size={18} />
-                  <span>Privacy-Safe Export by Default</span>
+              <div className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <ShieldCheck size={20} className="text-emerald-400" />
+                  <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Privacy-First Export Guarantee</span>
                 </div>
-                <p style={{ fontSize: '0.8rem', color: '#a7f3d0', marginTop: '6px', lineHeight: 1.45 }}>
-                  By default, any uploaded room photograph is stripped from the exported file so you can safely share your furniture arrangement with friends, landlords, or contractors without revealing personal living spaces.
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+                  By default, any uploaded room photographs are stripped from exported files to prevent accidentally leaking private home imagery.
+                  The exported file contains only geometric vectors, room dimensions, material finishes, and spatial fit evaluations.
                 </p>
 
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={includePhoto}
-                    onChange={e => setIncludePhoto(e.target.checked)}
-                    style={{ cursor: 'pointer' }}
-                  />
-                  <span style={{ fontSize: '0.775rem', color: 'var(--text-main)' }}>
-                    Include room photograph in export file (Explicit Opt-in)
-                  </span>
-                </label>
+                {project.photoContext.hasPhoto && (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px', fontSize: '0.825rem', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={includePhoto}
+                      onChange={e => setIncludePhoto(e.target.checked)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <span style={{ color: includePhoto ? 'var(--warning-amber)' : 'var(--text-muted)' }}>
+                      Explicitly include room photo in export (Warning: creates large file with private image)
+                    </span>
+                  </label>
+                )}
               </div>
 
-              {/* Action Buttons */}
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button
                   onClick={handleDownloadJson}
                   className="btn btn-primary"
-                  style={{ flex: 1, padding: '10px' }}
+                  style={{ flex: 1, padding: '12px', justifyContent: 'center' }}
                 >
                   <Download size={16} />
-                  <span>Download .fitcheck.json</span>
+                  Download .apnaghar.json
                 </button>
                 <button
                   onClick={handleCopyJson}
-                  className="btn btn-secondary"
-                  style={{ padding: '10px 16px' }}
+                  className="btn btn-ghost"
+                  style={{ padding: '12px 18px', border: '1px solid var(--border-medium)' }}
                 >
                   {copied ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} />}
-                  <span>{copied ? 'Copied' : 'Copy JSON'}</span>
+                  {copied ? 'Copied!' : 'Copy JSON'}
                 </button>
               </div>
 
-              {/* Preview Info */}
-              <div className="glass-panel" style={{ padding: '14px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '6px' }}>Project Summary</div>
-                <div>Room: {project.room.name} ({project.room.width} × {project.room.length} cm)</div>
-                <div>Furniture Count: {project.furniture.length} items</div>
-                <div>Overall Fit Status: <strong style={{ color: fitReport.overallStatus === 'PASS' ? '#34d399' : '#fbbf24' }}>{fitReport.overallStatus}</strong></div>
+              <div style={{
+                background: 'rgba(0,0,0,0.25)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-md)',
+                padding: '12px 14px',
+                fontSize: '0.75rem',
+                fontFamily: 'monospace',
+                color: 'var(--text-muted)',
+                maxHeight: '180px',
+                overflowY: 'auto',
+                whiteSpace: 'pre-wrap',
+              }}>
+                {exportProjectJson(project, includePhoto).slice(0, 1200)}...
               </div>
             </div>
           )}
@@ -225,66 +251,114 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           {activeTab === 'report' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                  Print or save as PDF client-ready summary
-                </span>
-                <button onClick={handlePrintSummary} className="btn btn-primary" style={{ fontSize: '0.8rem', padding: '6px 14px' }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Comprehensive Home & Room Space Plan</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Ready for client presentations, contractor review, or print</div>
+                </div>
+                <button
+                  onClick={handlePrintSummary}
+                  className="btn btn-primary"
+                  style={{ padding: '8px 14px', fontSize: '0.8rem' }}
+                >
                   <Printer size={15} />
-                  <span>Print / Save PDF</span>
+                  Print / Save as PDF
                 </button>
               </div>
 
-              {/* Printable Document Preview */}
+              {/* Printable Document Paper */}
               <div style={{
                 background: '#ffffff',
-                color: '#0f172a',
-                padding: '24px',
+                color: '#1e293b',
+                padding: '28px',
                 borderRadius: 'var(--radius-md)',
                 fontFamily: 'var(--font-body)',
                 fontSize: '0.85rem',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #0f172a', paddingBottom: '12px', marginBottom: '16px' }}>
+                {/* Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #0f172a', paddingBottom: '14px', marginBottom: '18px' }}>
                   <div>
-                    <h1 style={{ fontSize: '1.4rem', fontWeight: 800, margin: 0, color: '#0284c7' }}>FitCheck Space Plan</h1>
-                    <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Project: {project.name}</div>
+                    <h1 style={{ fontSize: '1.45rem', fontWeight: 800, margin: 0, color: '#b45309' }}>
+                      ApnaGhar (अपना घर) — Home Space Plan
+                    </h1>
+                    <div style={{ fontSize: '0.85rem', color: '#475569', fontWeight: 600, marginTop: '2px' }}>
+                      Project: {project.name}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                      {project.floors.length} Floor{project.floors.length !== 1 ? 's' : ''} • {project.rooms.length} Room{project.rooms.length !== 1 ? 's' : ''} • Total Area: {totalAreaSqM} m² • {totalFurnitureCount} Furniture Items
+                    </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>Status: {fitReport.overallStatus}</div>
-                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{new Date().toLocaleDateString()}</div>
+                    <div style={{ fontWeight: 700, fontSize: '1.05rem', color: fitReport.overallStatus === 'PASS' ? '#059669' : '#dc2626' }}>
+                      Status: {fitReport.overallStatus}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>
+                      {new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                    </div>
                   </div>
                 </div>
 
-                <div style={{ marginBottom: '16px' }}>
-                  <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '6px' }}>Room Dimensions</h3>
-                  <div>Width: {formatDimension(project.room.width, displayUnit)}</div>
-                  <div>Length: {formatDimension(project.room.length, displayUnit)}</div>
-                  <div>Ceiling Height: {formatDimension(project.room.height, displayUnit)}</div>
-                </div>
+                {/* Rooms Breakdown */}
+                {project.rooms.map((rm, idx) => {
+                  const floorName = project.floors.find(f => f.id === rm.floorId)?.name || 'Ground Floor';
+                  const areaM = Math.round(((rm.width * rm.length) / 10000) * 10) / 10;
+                  return (
+                    <div key={rm.id} style={{ marginBottom: '22px', borderBottom: idx < project.rooms.length - 1 ? '1px dashed #cbd5e1' : 'none', paddingBottom: '16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <div>
+                          <span style={{ fontWeight: 700, fontSize: '1rem', color: '#0f172a' }}>
+                            {rm.name}
+                          </span>
+                          <span style={{ marginLeft: '8px', fontSize: '0.75rem', background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px', color: '#475569' }}>
+                            {floorName} • {rm.type}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                          {formatDimension(rm.width, displayUnit, false)} × {formatDimension(rm.length, displayUnit)} ({areaM} m²)
+                        </div>
+                      </div>
 
-                <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '6px' }}>Furniture Inventory</h3>
-                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '16px', fontSize: '0.775rem' }}>
-                  <thead>
-                    <tr style={{ background: '#f1f5f9', borderBottom: '1px solid #cbd5e1' }}>
-                      <th style={{ textAlign: 'left', padding: '6px' }}>Item</th>
-                      <th style={{ textAlign: 'left', padding: '6px' }}>Dimensions</th>
-                      <th style={{ textAlign: 'left', padding: '6px' }}>Provenance</th>
-                      <th style={{ textAlign: 'left', padding: '6px' }}>Confirmed</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {project.furniture.map(item => (
-                      <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '6px', fontWeight: 600 }}>{item.name}</td>
-                        <td style={{ padding: '6px' }}>{formatDimension(item.width, displayUnit, false)} × {formatDimension(item.depth, displayUnit, false)} × {formatDimension(item.height, displayUnit)}</td>
-                        <td style={{ padding: '6px' }}>{item.provenance}</td>
-                        <td style={{ padding: '6px' }}>{item.isConfirmed ? 'Yes' : 'No (Estimate)'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                      {rm.finishes && (
+                        <div style={{ fontSize: '0.75rem', color: '#475569', marginBottom: '8px', background: '#f8fafc', padding: '6px 10px', borderRadius: '4px' }}>
+                          <strong>Interior Finishes:</strong> Wall: {rm.finishes.wallColor} ({rm.finishes.wallFinish}) • Floor: {rm.finishes.floorType.replace('_', ' ')} ({rm.finishes.floorColor})
+                        </div>
+                      )}
 
-                <div style={{ background: '#fee2e2', padding: '10px', borderRadius: '4px', fontSize: '0.75rem', color: '#991b1b', lineHeight: 1.4 }}>
-                  <strong>Disclaimer:</strong> {fitReport.disclaimer}
+                      {/* Furniture Table for Room */}
+                      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '10px', fontSize: '0.775rem' }}>
+                        <thead>
+                          <tr style={{ background: '#f1f5f9', borderBottom: '1px solid #cbd5e1' }}>
+                            <th style={{ textAlign: 'left', padding: '6px' }}>Furniture Item</th>
+                            <th style={{ textAlign: 'left', padding: '6px' }}>Dimensions (W×D×H)</th>
+                            <th style={{ textAlign: 'left', padding: '6px' }}>Provenance</th>
+                            <th style={{ textAlign: 'left', padding: '6px' }}>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(rm.furniture || []).length === 0 ? (
+                            <tr>
+                              <td colSpan={4} style={{ padding: '8px', textAlign: 'center', color: '#94a3b8' }}>No furniture placed in this room yet.</td>
+                            </tr>
+                          ) : (
+                            (rm.furniture || []).map(item => (
+                              <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                <td style={{ padding: '6px', fontWeight: 600 }}>{item.name}</td>
+                                <td style={{ padding: '6px' }}>
+                                  {formatDimension(item.width, displayUnit, false)} × {formatDimension(item.depth, displayUnit, false)} × {formatDimension(item.height, displayUnit)}
+                                </td>
+                                <td style={{ padding: '6px' }}>{item.provenance}</td>
+                                <td style={{ padding: '6px' }}>{item.isConfirmed ? '✓ Confirmed' : '⚠ Estimated'}</td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })}
+
+                <div style={{ background: '#fee2e2', padding: '10px 14px', borderRadius: '4px', fontSize: '0.75rem', color: '#991b1b', lineHeight: 1.4 }}>
+                  <strong>Spatial Fit Disclaimer:</strong> Geometric calculations check boundary collisions and specified door/drawer clearance zones. They do not substitute for on-site structural engineering or local municipal building codes.
                 </div>
               </div>
             </div>
@@ -301,52 +375,59 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 flexDirection: 'column',
                 alignItems: 'center',
                 gap: '12px',
+                background: 'rgba(255, 255, 255, 0.01)',
               }}>
-                <Upload size={32} className="text-sky-400" />
-                <div style={{ fontWeight: 600 }}>Choose a .fitcheck.json project file</div>
+                <Upload size={32} className="text-terracotta" />
+                <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>Select an ApnaGhar (.apnaghar.json) plan</div>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', maxWidth: '420px', margin: 0 }}>
+                  Supports native ApnaGhar projects as well as versioned migration from legacy formats.
+                </p>
                 <input
                   type="file"
-                  accept=".json,.fitcheck.json"
+                  accept=".json,.apnaghar.json,.fitcheck.json"
                   onChange={handleImportFile}
-                  style={{ display: 'block', margin: '0 auto', fontSize: '0.85rem' }}
+                  style={{ display: 'block', margin: '8px auto 0 auto', fontSize: '0.85rem' }}
                 />
               </div>
             </div>
           )}
 
           {activeTab === 'demos' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0 }}>
-                Instant demo templates to test 2D/3D layouts and fit verification:
+                Instant preloaded home projects and architectural room templates:
               </p>
 
-              {[
-                { id: 'living', name: 'Scandi Living Room', desc: '480×560 cm room with sofa, coffee table, media unit, armchair & door swing' },
-                { id: 'bedroom', name: 'Master Bedroom', desc: '340×420 cm room with Queen bed, nightstand, and study desk' },
-                { id: 'office', name: 'Home Studio & Office', desc: '320×360 cm workspace with standing desk, bookcase, and indoor plants' },
-              ].map(demo => (
-                <div
-                  key={demo.id}
-                  className="glass-panel"
-                  style={{ padding: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                >
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{demo.name}</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>{demo.desc}</div>
+              <div
+                className="glass-panel"
+                style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid var(--primary-clay)' }}
+              >
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Home size={18} className="text-terracotta" />
+                    <span style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-bright)' }}>
+                      Shanti Niwas (शान्ति निवास) — Full Home
+                    </span>
+                    <span style={{ fontSize: '0.7rem', background: 'var(--primary-clay)', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>
+                      RECOMMENDED
+                    </span>
                   </div>
-                  <button
-                    onClick={() => {
-                      const sample = createSampleDemoProject(demo.id as any);
-                      onLoadProject(sample);
-                      onClose();
-                    }}
-                    className="btn btn-primary"
-                    style={{ fontSize: '0.8rem', padding: '6px 12px' }}
-                  >
-                    Load Demo
-                  </button>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px', maxWidth: '440px' }}>
+                    Two-story home with 4 curated rooms: Living & Lounge, Dining, Master Bedroom Suite, and Home Studio, complete with doors, windows, and finishes.
+                  </div>
                 </div>
-              ))}
+                <button
+                  onClick={() => {
+                    const sample = createSampleHomeProject();
+                    onLoadProject(sample);
+                    onClose();
+                  }}
+                  className="btn btn-primary"
+                  style={{ fontSize: '0.8rem', padding: '8px 14px' }}
+                >
+                  Load Whole Home
+                </button>
+              </div>
             </div>
           )}
         </div>

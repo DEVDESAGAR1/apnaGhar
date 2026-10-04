@@ -1,8 +1,17 @@
-import type { FitProject, RoomModel, PhotoContext, AppSettings } from '../types/model';
+import type { 
+  HomeProject, 
+  RoomModel, 
+  FloorModel, 
+  PhotoContext, 
+  AppSettings,
+  RoomType 
+} from '../types/model';
+import { DEFAULT_MATERIAL_FINISH } from '../types/model';
 import { FURNITURE_CATALOG, createFurnitureFromCatalog } from './catalog';
 
-const STORAGE_KEY_CURRENT_PROJECT = 'fitcheck_active_project';
-const STORAGE_KEY_PROJECT_LIST = 'fitcheck_project_index';
+const STORAGE_KEY_CURRENT_HOME = 'apnaghar_active_home';
+const STORAGE_KEY_HOME_LIST = 'apnaghar_home_index';
+const LEGACY_STORAGE_KEY = 'fitcheck_active_project';
 
 export const DEFAULT_SETTINGS: AppSettings = {
   displayUnit: 'cm',
@@ -12,6 +21,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showDimensionsOnPlan: true,
   enableExternalAi: false,
   aiProvider: 'local-heuristic',
+  ollamaBaseUrl: 'http://localhost:11434',
+  ollamaModel: 'llama3.2-vision',
 };
 
 export const DEFAULT_EMPTY_PHOTO_CONTEXT: PhotoContext = {
@@ -20,17 +31,115 @@ export const DEFAULT_EMPTY_PHOTO_CONTEXT: PhotoContext = {
 };
 
 /**
- * Creates a brand new empty project
+ * Versioned Migration: Migrates any legacy single-room project to a multi-room HomeProject
  */
-export function createNewProject(name: string = 'My Living Room', width: number = 420, length: number = 500): FitProject {
+export function migrateToHomeProject(data: any): HomeProject {
   const now = new Date().toISOString();
-  const id = `project-${Date.now()}`;
+
+  // If already a valid multi-room HomeProject
+  if (data && Array.isArray(data.rooms) && data.rooms.length > 0 && Array.isArray(data.floors)) {
+    const activeRoomId = data.activeRoomId || data.rooms[0]?.id || 'room-1';
+    const mappedRooms: RoomModel[] = data.rooms.map((r: any) => ({
+      ...r,
+      id: r.id || `room-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      type: r.type || 'living',
+      floorId: r.floorId || data.floors[0]?.id || 'floor-ground',
+      furniture: Array.isArray(r.furniture) ? r.furniture : [],
+      finishes: r.finishes || { ...DEFAULT_MATERIAL_FINISH },
+    }));
+
+    const activeRoom = mappedRooms.find(r => r.id === activeRoomId) || mappedRooms[0];
+    if (activeRoom && Array.isArray(data.furniture) && data.furniture.length > activeRoom.furniture.length) {
+      activeRoom.furniture = data.furniture;
+    }
+
+    return {
+      id: data.id || `home-${Date.now()}`,
+      name: data.name || 'My Home',
+      tagline: data.tagline || 'Imagine your space. Design your home.',
+      createdAt: data.createdAt || now,
+      updatedAt: data.updatedAt || now,
+      floors: data.floors,
+      rooms: mappedRooms,
+      activeRoomId: activeRoom?.id || activeRoomId,
+      activeFloorId: data.activeFloorId || data.floors[0]?.id || 'floor-ground',
+      photoContext: data.photoContext || { ...DEFAULT_EMPTY_PHOTO_CONTEXT },
+      settings: data.settings || { ...DEFAULT_SETTINGS },
+      room: activeRoom,
+      furniture: activeRoom?.furniture || [],
+    };
+  }
+
+  // Legacy single-room project structure
+  const groundFloor: FloorModel = {
+    id: 'floor-ground',
+    name: 'Ground Floor',
+    level: 0,
+  };
+
+  const legacyRoom = data?.room || {
+    name: 'Living Room',
+    width: 480,
+    length: 560,
+    height: 270,
+    wallThickness: 15,
+    openings: [],
+  };
+
+  const migratedRoom: RoomModel = {
+    id: legacyRoom.id || 'room-primary',
+    name: legacyRoom.name || 'Main Room',
+    type: 'living',
+    floorId: 'floor-ground',
+    width: Number(legacyRoom.width) || 480,
+    length: Number(legacyRoom.length) || 560,
+    height: Number(legacyRoom.height) || 270,
+    wallThickness: Number(legacyRoom.wallThickness) || 15,
+    openings: Array.isArray(legacyRoom.openings) ? legacyRoom.openings : [],
+    furniture: Array.isArray(data?.furniture) ? data.furniture : (Array.isArray(legacyRoom.furniture) ? legacyRoom.furniture : []),
+    finishes: { ...DEFAULT_MATERIAL_FINISH },
+  };
+
+  return {
+    id: data?.id || `home-${Date.now()}`,
+    name: data?.name || 'My Home (अपना घर)',
+    tagline: 'Imagine your space. Design your home.',
+    createdAt: data?.createdAt || now,
+    updatedAt: now,
+    floors: [groundFloor],
+    rooms: [migratedRoom],
+    activeRoomId: migratedRoom.id,
+    activeFloorId: groundFloor.id,
+    photoContext: data?.photoContext || { ...DEFAULT_EMPTY_PHOTO_CONTEXT },
+    settings: data?.settings || { ...DEFAULT_SETTINGS },
+    room: migratedRoom,
+    furniture: migratedRoom.furniture,
+  };
+}
+
+/**
+ * Creates a brand new empty home project with a default room
+ */
+export function createNewHomeProject(
+  homeName: string = 'My Home (अपना घर)',
+  width: number = 480,
+  length: number = 540
+): HomeProject {
+  const now = new Date().toISOString();
+  const groundFloor: FloorModel = {
+    id: `floor-${Date.now()}-0`,
+    name: 'Ground Floor',
+    level: 0,
+  };
 
   const defaultRoom: RoomModel = {
-    name,
-    width,
-    length,
-    height: 260,
+    id: `room-${Date.now()}-1`,
+    name: 'Living Room',
+    type: 'living',
+    floorId: groundFloor.id,
+    width: width || 480,
+    length: length || 540,
+    height: 270,
     wallThickness: 15,
     openings: [
       {
@@ -47,143 +156,86 @@ export function createNewProject(name: string = 'My Living Room', width: number 
         id: 'window-main',
         type: 'window',
         wall: 'north',
-        offset: 120,
+        offset: 140,
         width: 180,
-        height: 140,
-        sillHeight: 90,
+        height: 150,
+        sillHeight: 85,
       },
     ],
+    furniture: [],
+    finishes: { ...DEFAULT_MATERIAL_FINISH },
   };
 
   return {
-    id,
-    name,
+    id: `home-${Date.now()}`,
+    name: homeName,
+    tagline: 'Imagine your space. Design your home.',
     createdAt: now,
     updatedAt: now,
-    room: defaultRoom,
-    furniture: [],
+    floors: [groundFloor],
+    rooms: [defaultRoom],
+    activeRoomId: defaultRoom.id,
+    activeFloorId: groundFloor.id,
     photoContext: { ...DEFAULT_EMPTY_PHOTO_CONTEXT },
     settings: { ...DEFAULT_SETTINGS },
+    room: defaultRoom,
+    furniture: defaultRoom.furniture,
   };
 }
 
 /**
- * Generates sample preloaded demo projects for immediate demonstration
+ * Generates a rich sample multi-room home: "Shanti Niwas (शान्ति निवास)"
  */
-export function createSampleDemoProject(template: 'living' | 'bedroom' | 'office' = 'living'): FitProject {
+export function createSampleHomeProject(): HomeProject {
   const now = new Date().toISOString();
 
-  if (template === 'bedroom') {
-    const room: RoomModel = {
-      name: 'Master Bedroom',
-      width: 340,
-      length: 420,
-      height: 250,
-      wallThickness: 15,
-      openings: [
-        {
-          id: 'door-bed',
-          type: 'door',
-          wall: 'west',
-          offset: 60,
-          width: 85,
-          height: 205,
-          doorSwing: 'inward-right',
-          swingClearance: 85,
-        },
-        {
-          id: 'window-bed',
-          type: 'window',
-          wall: 'north',
-          offset: 100,
-          width: 140,
-          height: 130,
-          sillHeight: 90,
-        },
-      ],
-    };
+  const floorGround: FloorModel = {
+    id: 'floor-ground',
+    name: 'Ground Floor',
+    level: 0,
+  };
 
-    const bed = createFurnitureFromCatalog(FURNITURE_CATALOG.find(i => i.modelType === 'bed_queen')!, room.width, room.length);
-    bed.x = 170;
-    bed.y = 130;
-    bed.rotation = 0;
+  const floorUpper: FloorModel = {
+    id: 'floor-upper',
+    name: 'First Floor',
+    level: 1,
+  };
 
-    const nightstand = createFurnitureFromCatalog(FURNITURE_CATALOG.find(i => i.modelType === 'nightstand')!, room.width, room.length);
-    nightstand.x = 60;
-    nightstand.y = 50;
+  // 1. Living Room (Ground Floor)
+  const sofa = createFurnitureFromCatalog(FURNITURE_CATALOG.find(i => i.modelType === 'sofa_3seater')!, 480, 560);
+  sofa.x = 240;
+  sofa.y = 380;
+  sofa.rotation = 0;
 
-    const desk = createFurnitureFromCatalog(FURNITURE_CATALOG.find(i => i.modelType === 'desk_compact')!, room.width, room.length);
-    desk.x = 270;
-    desk.y = 350;
-    desk.rotation = 180;
+  const coffeeTable = createFurnitureFromCatalog(FURNITURE_CATALOG.find(i => i.modelType === 'coffee_table')!, 480, 560);
+  coffeeTable.x = 240;
+  coffeeTable.y = 280;
 
-    return {
-      id: `demo-bedroom-${Date.now()}`,
-      name: 'Sample Master Bedroom',
-      createdAt: now,
-      updatedAt: now,
-      room,
-      furniture: [bed, nightstand, desk],
-      photoContext: { ...DEFAULT_EMPTY_PHOTO_CONTEXT },
-      settings: { ...DEFAULT_SETTINGS },
-    };
-  }
+  const tvUnit = createFurnitureFromCatalog(FURNITURE_CATALOG.find(i => i.modelType === 'tv_unit')!, 480, 560);
+  tvUnit.x = 240;
+  tvUnit.y = 40;
 
-  if (template === 'office') {
-    const room: RoomModel = {
-      name: 'Home Studio & Office',
-      width: 320,
-      length: 360,
-      height: 260,
-      wallThickness: 15,
-      openings: [
-        {
-          id: 'door-office',
-          type: 'door',
-          wall: 'south',
-          offset: 60,
-          width: 80,
-          height: 200,
-          doorSwing: 'inward-left',
-          swingClearance: 80,
-        },
-      ],
-    };
+  const armchair = createFurnitureFromCatalog(FURNITURE_CATALOG.find(i => i.modelType === 'armchair')!, 480, 560);
+  armchair.x = 90;
+  armchair.y = 330;
+  armchair.rotation = 45;
 
-    const desk = createFurnitureFromCatalog(FURNITURE_CATALOG.find(i => i.modelType === 'desk')!, room.width, room.length);
-    desk.x = 160;
-    desk.y = 80;
+  const plant = createFurnitureFromCatalog(FURNITURE_CATALOG.find(i => i.modelType === 'plant')!, 480, 560);
+  plant.x = 420;
+  plant.y = 50;
 
-    const bookcase = createFurnitureFromCatalog(FURNITURE_CATALOG.find(i => i.modelType === 'bookcase')!, room.width, room.length);
-    bookcase.x = 260;
-    bookcase.y = 20;
-
-    const plant = createFurnitureFromCatalog(FURNITURE_CATALOG.find(i => i.modelType === 'plant')!, room.width, room.length);
-    plant.x = 45;
-    plant.y = 45;
-
-    return {
-      id: `demo-office-${Date.now()}`,
-      name: 'Sample Home Office',
-      createdAt: now,
-      updatedAt: now,
-      room,
-      furniture: [desk, bookcase, plant],
-      photoContext: { ...DEFAULT_EMPTY_PHOTO_CONTEXT },
-      settings: { ...DEFAULT_SETTINGS },
-    };
-  }
-
-  // Default: Spacious Living Room Demo
-  const room: RoomModel = {
-    name: 'Scandi Living Room',
+  const livingRoom: RoomModel = {
+    id: 'room-living',
+    name: 'Living & Lounge',
+    type: 'living',
+    floorId: floorGround.id,
     width: 480,
     length: 560,
     height: 270,
     wallThickness: 15,
     openings: [
       {
-        id: 'door-entry',
+        id: 'door-front',
         type: 'door',
         wall: 'south',
         offset: 80,
@@ -202,54 +254,302 @@ export function createSampleDemoProject(template: 'living' | 'bedroom' | 'office
         sillHeight: 80,
       },
     ],
+    furniture: [sofa, coffeeTable, tvUnit, armchair, plant],
+    finishes: {
+      wallColor: '#F5F2EB', // Warm Alabaster
+      wallFinish: 'limewash',
+      floorType: 'hardwood_oak',
+      floorColor: '#C49A6C',
+    },
   };
 
-  const sofa = createFurnitureFromCatalog(FURNITURE_CATALOG.find(i => i.modelType === 'sofa_3seater')!, room.width, room.length);
-  sofa.x = 240;
-  sofa.y = 380;
-  sofa.rotation = 0;
+  // 2. Dining & Kitchenette (Ground Floor)
+  const diningTable = createFurnitureFromCatalog(FURNITURE_CATALOG.find(i => i.modelType === 'dining_table')!, 380, 420);
+  diningTable.x = 190;
+  diningTable.y = 210;
 
-  const coffeeTable = createFurnitureFromCatalog(FURNITURE_CATALOG.find(i => i.modelType === 'coffee_table')!, room.width, room.length);
-  coffeeTable.x = 240;
-  coffeeTable.y = 280;
+  const diningPlant = createFurnitureFromCatalog(FURNITURE_CATALOG.find(i => i.modelType === 'plant')!, 380, 420);
+  diningPlant.x = 50;
+  diningPlant.y = 50;
 
-  const tvUnit = createFurnitureFromCatalog(FURNITURE_CATALOG.find(i => i.modelType === 'tv_unit')!, room.width, room.length);
-  tvUnit.x = 240;
-  tvUnit.y = 40;
+  const diningRoom: RoomModel = {
+    id: 'room-dining',
+    name: 'Dining & Kitchenette',
+    type: 'dining',
+    floorId: floorGround.id,
+    width: 380,
+    length: 420,
+    height: 270,
+    wallThickness: 15,
+    openings: [
+      {
+        id: 'door-patio',
+        type: 'door',
+        wall: 'south',
+        offset: 60,
+        width: 85,
+        height: 210,
+        doorSwing: 'inward-right',
+        swingClearance: 85,
+      },
+    ],
+    furniture: [diningTable, diningPlant],
+    finishes: {
+      wallColor: '#E6E2D8', // Limewash Stone
+      wallFinish: 'matte',
+      floorType: 'limestone_tile',
+      floorColor: '#D8D2C4',
+    },
+  };
 
-  const armchair = createFurnitureFromCatalog(FURNITURE_CATALOG.find(i => i.modelType === 'armchair')!, room.width, room.length);
-  armchair.x = 90;
-  armchair.y = 330;
-  armchair.rotation = 45;
+  // 3. Master Bedroom (First Floor)
+  const bed = createFurnitureFromCatalog(FURNITURE_CATALOG.find(i => i.modelType === 'bed_queen')!, 360, 440);
+  bed.x = 180;
+  bed.y = 140;
 
-  const plant = createFurnitureFromCatalog(FURNITURE_CATALOG.find(i => i.modelType === 'plant')!, room.width, room.length);
-  plant.x = 420;
-  plant.y = 50;
+  const nightstandL = createFurnitureFromCatalog(FURNITURE_CATALOG.find(i => i.modelType === 'nightstand')!, 360, 440);
+  nightstandL.x = 55;
+  nightstandL.y = 60;
+
+  const nightstandR = createFurnitureFromCatalog(FURNITURE_CATALOG.find(i => i.modelType === 'nightstand')!, 360, 440);
+  nightstandR.x = 305;
+  nightstandR.y = 60;
+
+  const dresser = createFurnitureFromCatalog(FURNITURE_CATALOG.find(i => i.modelType === 'dresser')!, 360, 440);
+  dresser.x = 180;
+  dresser.y = 390;
+  dresser.rotation = 180;
+
+  const bedroom: RoomModel = {
+    id: 'room-master-bed',
+    name: 'Master Bedroom',
+    type: 'bedroom',
+    floorId: floorUpper.id,
+    width: 360,
+    length: 440,
+    height: 260,
+    wallThickness: 15,
+    openings: [
+      {
+        id: 'door-bedroom',
+        type: 'door',
+        wall: 'west',
+        offset: 60,
+        width: 85,
+        height: 205,
+        doorSwing: 'inward-right',
+        swingClearance: 85,
+      },
+      {
+        id: 'window-bed',
+        type: 'window',
+        wall: 'north',
+        offset: 100,
+        width: 160,
+        height: 140,
+        sillHeight: 90,
+      },
+    ],
+    furniture: [bed, nightstandL, nightstandR, dresser],
+    finishes: {
+      wallColor: '#F2EDE4', // Soft Linen
+      wallFinish: 'matte',
+      floorType: 'herringbone_parquet',
+      floorColor: '#B88B58',
+    },
+  };
+
+  // 4. Home Studio & Office (First Floor)
+  const desk = createFurnitureFromCatalog(FURNITURE_CATALOG.find(i => i.modelType === 'desk')!, 320, 360);
+  desk.x = 160;
+  desk.y = 80;
+
+  const bookcase = createFurnitureFromCatalog(FURNITURE_CATALOG.find(i => i.modelType === 'bookcase')!, 320, 360);
+  bookcase.x = 265;
+  bookcase.y = 25;
+
+  const officeChair = createFurnitureFromCatalog(FURNITURE_CATALOG.find(i => i.modelType === 'armchair')!, 320, 360);
+  officeChair.x = 160;
+  officeChair.y = 260;
+
+  const studio: RoomModel = {
+    id: 'room-studio',
+    name: 'Home Studio & Office',
+    type: 'office',
+    floorId: floorUpper.id,
+    width: 320,
+    length: 360,
+    height: 260,
+    wallThickness: 15,
+    openings: [
+      {
+        id: 'door-office',
+        type: 'door',
+        wall: 'south',
+        offset: 50,
+        width: 80,
+        height: 200,
+        doorSwing: 'inward-left',
+        swingClearance: 80,
+      },
+      {
+        id: 'window-office',
+        type: 'window',
+        wall: 'north',
+        offset: 90,
+        width: 140,
+        height: 130,
+        sillHeight: 95,
+      },
+    ],
+    furniture: [desk, bookcase, officeChair],
+    finishes: {
+      wallColor: '#EBEFEB', // Muted Sage wash
+      wallFinish: 'matte',
+      floorType: 'hardwood_walnut',
+      floorColor: '#6D4C3D',
+    },
+  };
 
   return {
-    id: `demo-living-${Date.now()}`,
-    name: 'Sample Scandi Living Room',
+    id: `home-sample-${Date.now()}`,
+    name: 'Shanti Niwas (शान्ति निवास)',
+    tagline: 'Imagine your space. Design your home.',
     createdAt: now,
     updatedAt: now,
-    room,
-    furniture: [sofa, coffeeTable, tvUnit, armchair, plant],
+    floors: [floorGround, floorUpper],
+    rooms: [livingRoom, diningRoom, bedroom, studio],
+    activeRoomId: livingRoom.id,
+    activeFloorId: floorGround.id,
     photoContext: { ...DEFAULT_EMPTY_PHOTO_CONTEXT },
     settings: { ...DEFAULT_SETTINGS },
+    room: livingRoom,
+    furniture: livingRoom.furniture,
+  };
+}
+
+/**
+ * Add a new room to a home project
+ */
+export function addRoomToHome(
+  project: HomeProject,
+  name: string,
+  type: RoomType,
+  floorId: string,
+  width: number = 400,
+  length: number = 480
+): HomeProject {
+  const newRoomId = `room-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const newRoom: RoomModel = {
+    id: newRoomId,
+    name,
+    type,
+    floorId,
+    width: Math.max(100, width),
+    length: Math.max(100, length),
+    height: 260,
+    wallThickness: 15,
+    openings: [
+      {
+        id: `door-${Date.now()}`,
+        type: 'door',
+        wall: 'south',
+        offset: 60,
+        width: 85,
+        height: 205,
+        doorSwing: 'inward-left',
+        swingClearance: 85,
+      },
+    ],
+    furniture: [],
+    finishes: { ...DEFAULT_MATERIAL_FINISH },
+  };
+
+  return {
+    ...project,
+    rooms: [...project.rooms, newRoom],
+    activeRoomId: newRoom.id,
+    activeFloorId: floorId,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Delete a room from home project safely (prevents deleting last room)
+ */
+export function deleteRoomFromHome(project: HomeProject, roomId: string): HomeProject {
+  if (project.rooms.length <= 1) {
+    return project; // Never delete the only remaining room
+  }
+
+  const updatedRooms = project.rooms.filter(r => r.id !== roomId);
+  const nextActiveRoom = updatedRooms.find(r => r.id === project.activeRoomId) || updatedRooms[0];
+
+  return {
+    ...project,
+    rooms: updatedRooms,
+    activeRoomId: nextActiveRoom.id,
+    activeFloorId: nextActiveRoom.floorId,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Duplicate a room with its geometry, openings, and furniture
+ */
+export function duplicateRoomInHome(project: HomeProject, roomId: string): HomeProject {
+  const sourceRoom = project.rooms.find(r => r.id === roomId);
+  if (!sourceRoom) return project;
+
+  const duplicatedId = `room-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const duplicatedRoom: RoomModel = {
+    ...sourceRoom,
+    id: duplicatedId,
+    name: `${sourceRoom.name} (Copy)`,
+    openings: sourceRoom.openings.map(o => ({ ...o, id: `opening-${Date.now()}-${Math.random().toString(36).substring(2, 5)}` })),
+    furniture: sourceRoom.furniture.map(f => ({ ...f, id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 5)}` })),
+    finishes: { ...sourceRoom.finishes },
+  };
+
+  return {
+    ...project,
+    rooms: [...project.rooms, duplicatedRoom],
+    activeRoomId: duplicatedRoom.id,
+    updatedAt: new Date().toISOString(),
   };
 }
 
 /**
  * Save project to browser local storage
  */
-export function saveProject(project: FitProject): void {
+export function saveProject(project: HomeProject): void {
   try {
     project.updatedAt = new Date().toISOString();
+
+    // If top-level furniture was manipulated directly, keep activeRoom synced
+    const active = project.rooms.find(r => r.id === project.activeRoomId) || project.rooms[0];
+    if (active && Array.isArray(project.furniture)) {
+      active.furniture = project.furniture;
+    }
+    if (active && project.room) {
+      active.width = project.room.width;
+      active.length = project.room.length;
+      active.height = project.room.height;
+      active.name = project.room.name;
+      active.openings = project.room.openings;
+    }
+    if (active) {
+      project.room = active;
+      project.furniture = active.furniture || [];
+    }
+
     const serialized = JSON.stringify(project);
-    localStorage.setItem(STORAGE_KEY_CURRENT_PROJECT, serialized);
+    localStorage.setItem(STORAGE_KEY_CURRENT_HOME, serialized);
+    localStorage.setItem(LEGACY_STORAGE_KEY, serialized);
 
     // Update project directory index
-    const indexStr = localStorage.getItem(STORAGE_KEY_PROJECT_LIST);
-    let index: { id: string; name: string; updatedAt: string; itemCount: number }[] = [];
+    const indexStr = localStorage.getItem(STORAGE_KEY_HOME_LIST);
+    let index: { id: string; name: string; updatedAt: string; roomCount: number; itemCount: number }[] = [];
     if (indexStr) {
       try {
         index = JSON.parse(indexStr);
@@ -258,12 +558,14 @@ export function saveProject(project: FitProject): void {
       }
     }
 
+    const totalItems = project.rooms.reduce((acc, r) => acc + (r.furniture?.length || 0), 0);
     const existingIdx = index.findIndex(p => p.id === project.id);
     const entry = {
       id: project.id,
       name: project.name,
       updatedAt: project.updatedAt,
-      itemCount: project.furniture.length,
+      roomCount: project.rooms.length,
+      itemCount: totalItems,
     };
 
     if (existingIdx >= 0) {
@@ -272,29 +574,27 @@ export function saveProject(project: FitProject): void {
       index.unshift(entry);
     }
 
-    localStorage.setItem(STORAGE_KEY_PROJECT_LIST, JSON.stringify(index));
+    localStorage.setItem(STORAGE_KEY_HOME_LIST, JSON.stringify(index));
   } catch (err) {
     console.error('Failed to save project to localStorage', err);
   }
 }
 
 /**
- * Load active project from localStorage or return default sample demo
+ * Load active project from localStorage or return default sample home
  */
-export function loadActiveProject(): FitProject {
+export function loadActiveProject(): HomeProject {
   try {
-    const serialized = localStorage.getItem(STORAGE_KEY_CURRENT_PROJECT);
+    const serialized = localStorage.getItem(STORAGE_KEY_CURRENT_HOME) || localStorage.getItem(LEGACY_STORAGE_KEY);
     if (serialized) {
       const parsed = JSON.parse(serialized);
-      if (parsed && parsed.room && Array.isArray(parsed.furniture)) {
-        return parsed;
-      }
+      return migrateToHomeProject(parsed);
     }
   } catch (err) {
-    console.warn('Could not parse stored project, starting with demo project.', err);
+    console.warn('Could not parse stored project, starting with sample home.', err);
   }
 
-  const demo = createSampleDemoProject('living');
+  const demo = createSampleHomeProject();
   saveProject(demo);
   return demo;
 }
@@ -302,9 +602,9 @@ export function loadActiveProject(): FitProject {
 /**
  * List all saved project summaries
  */
-export function listSavedProjects(): { id: string; name: string; updatedAt: string; itemCount: number }[] {
+export function listSavedProjects(): { id: string; name: string; updatedAt: string; roomCount?: number; itemCount: number }[] {
   try {
-    const indexStr = localStorage.getItem(STORAGE_KEY_PROJECT_LIST);
+    const indexStr = localStorage.getItem(STORAGE_KEY_HOME_LIST);
     if (indexStr) return JSON.parse(indexStr);
   } catch {
     // fallback
@@ -316,9 +616,12 @@ export function listSavedProjects(): { id: string; name: string; updatedAt: stri
  * Export project JSON with PRIVACY PRESERVATION BY DEFAULT
  * Photos are stripped unless user explicitly requests inclusion
  */
-export function exportProjectJson(project: FitProject, includePrivatePhoto: boolean = false): string {
-  const exportPayload: FitProject = {
+export function exportProjectJson(project: HomeProject, includePrivatePhoto: boolean = false): string {
+  const active = project.rooms.find(r => r.id === project.activeRoomId) || project.rooms[0];
+  const exportPayload: HomeProject = {
     ...project,
+    room: active || project.room,
+    furniture: active?.furniture || project.furniture || [],
     photoContext: {
       ...project.photoContext,
       // PRIVACY: strip raw image bytes by default
@@ -330,34 +633,35 @@ export function exportProjectJson(project: FitProject, includePrivatePhoto: bool
 }
 
 /**
- * Validates and imports project JSON
+ * Validates and imports project JSON (supporting both HomeProject and legacy FitProject)
  */
-export function importProjectJson(jsonStr: string): FitProject {
+export function importProjectJson(jsonStr: string): HomeProject {
   const parsed = JSON.parse(jsonStr);
 
-  if (!parsed.room || typeof parsed.room.width !== 'number' || typeof parsed.room.length !== 'number') {
-    throw new Error('Invalid FitCheck project file: Missing room dimensions.');
+  // Validate either multi-room or single-room
+  const hasRooms = Array.isArray(parsed.rooms) && parsed.rooms.length > 0;
+  const hasSingleRoom = parsed.room && typeof parsed.room.width === 'number';
+
+  if (!hasRooms && !hasSingleRoom) {
+    throw new Error('Invalid ApnaGhar project file: Missing room dimensions.');
   }
 
-  if (!Array.isArray(parsed.furniture)) {
-    parsed.furniture = [];
-  }
+  const migrated = migrateToHomeProject(parsed);
+  migrated.id = `imported-${Date.now()}`;
+  migrated.updatedAt = new Date().toISOString();
 
-  // Ensure unique ID and update timestamps
-  parsed.id = `imported-${Date.now()}`;
-  parsed.updatedAt = new Date().toISOString();
-  if (!parsed.settings) parsed.settings = { ...DEFAULT_SETTINGS };
-  if (!parsed.photoContext) parsed.photoContext = { ...DEFAULT_EMPTY_PHOTO_CONTEXT };
-
-  return parsed;
+  return migrated;
 }
 
 /**
  * Purge private photo from project and persistent storage
  */
-export function purgePrivatePhoto(project: FitProject): FitProject {
-  const updated: FitProject = {
+export function purgePrivatePhoto(project: HomeProject): HomeProject {
+  const active = project.rooms.find(r => r.id === project.activeRoomId) || project.rooms[0];
+  const updated: HomeProject = {
     ...project,
+    room: active || project.room,
+    furniture: active?.furniture || project.furniture || [],
     photoContext: {
       hasPhoto: false,
       photoDataUrl: undefined,
@@ -370,4 +674,13 @@ export function purgePrivatePhoto(project: FitProject): FitProject {
   };
   saveProject(updated);
   return updated;
+}
+
+// Backward-compatibility wrapper for single-room demo creation
+export function createSampleDemoProject(_template?: string): HomeProject {
+  return createSampleHomeProject();
+}
+
+export function createNewProject(name: string = 'My Home', width?: number, length?: number): HomeProject {
+  return createNewHomeProject(name, width, length);
 }

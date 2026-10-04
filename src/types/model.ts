@@ -1,12 +1,14 @@
 /**
- * FitCheck - Canonical Data Model
+ * ApnaGhar (अपना घर) - Canonical Data Model
  * 
  * Technical Principles:
  * - TypeScript strict mode.
- * - One canonical room model shared by 2D planner and 3D viewer.
+ * - One canonical home and room model shared by 2D planner, 3D visualizer, and fit engine.
  * - Centimeters (cm) as canonical units for all internal geometric calculations.
+ * - Multi-floor and multi-room project hierarchy with backward compatibility.
  * - Every dimension and item records provenance and confirmation status.
- * - Zero external AI calls without explicit consent.
+ * - Interior styling: materials, finishes, and design alternatives.
+ * - Local-first persistence and zero external AI calls without explicit consent.
  */
 
 export type UnitType = 'cm' | 'm' | 'in' | 'ft';
@@ -44,7 +46,7 @@ export interface FurnitureItem {
   height: number; // local Z dimension in cm
 
   // Position in room coordinates (cm)
-  // Origin (0,0) is top-left of the room rectangle (or center if aligned)
+  // Origin (0,0) is top-left of the room rectangle
   x: number; // cm from left wall (West wall)
   y: number; // cm from top wall (North wall)
   z: number; // cm elevation above floor (default 0)
@@ -53,6 +55,7 @@ export interface FurnitureItem {
   rotation: number;
 
   color: string;
+  material?: string; // e.g., 'natural_oak', 'walnut', 'boucle_fabric', 'linen', 'matte_black', 'brass'
   modelType: string; // for 3D procedural generation e.g. 'sofa_3seater', 'bed_queen', 'dining_table'
 
   clearances: ClearanceRequirements;
@@ -91,13 +94,60 @@ export interface RoomOpening {
   swingClearance?: number; // cm radius of swing arc (defaults to door width)
 }
 
-export interface RoomModel {
+export type FloorType = 
+  | 'hardwood_oak' 
+  | 'hardwood_walnut' 
+  | 'herringbone_parquet' 
+  | 'polished_concrete' 
+  | 'limestone_tile' 
+  | 'terrazzo';
+
+export interface RoomMaterialFinish {
+  wallColor: string; // hex (e.g. #F5F2EB for warm alabaster)
+  wallFinish: 'matte' | 'satin' | 'limewash';
+  floorType: FloorType;
+  floorColor: string; // hex
+}
+
+export interface DesignVariant {
+  id: string;
   name: string;
+  furniture: FurnitureItem[];
+  finishes: RoomMaterialFinish;
+  createdAt: string;
+}
+
+export type RoomType = 
+  | 'living' 
+  | 'bedroom' 
+  | 'kitchen' 
+  | 'dining' 
+  | 'office' 
+  | 'bathroom' 
+  | 'hallway' 
+  | 'balcony' 
+  | 'other';
+
+export interface RoomModel {
+  id: string;
+  name: string;
+  type: RoomType;
+  floorId: string;
   width: number;   // cm (X dimension, West-to-East)
   length: number;  // cm (Y dimension, North-to-South)
   height: number;  // cm (Z dimension, floor to ceiling)
   wallThickness: number; // cm (default 15cm)
   openings: RoomOpening[];
+  furniture: FurnitureItem[];
+  finishes: RoomMaterialFinish;
+  variants?: DesignVariant[];
+  activeVariantId?: string;
+}
+
+export interface FloorModel {
+  id: string;
+  name: string;
+  level: number; // 0 = Ground Floor, 1 = First Floor, -1 = Basement, etc.
 }
 
 export interface PhotoDetectionSuggestion {
@@ -132,27 +182,47 @@ export interface PhotoContext {
   privacyConsentAcknowledged: boolean;
 }
 
+export type AiProviderType = 
+  | 'local-heuristic' 
+  | 'local-gemma'
+  | 'local-ollama' 
+  | 'cloud-gemini' 
+  | 'custom-gemini-key' 
+  | 'disabled';
+
 export interface AppSettings {
   displayUnit: UnitType;
   gridSnap: boolean;
   gridSnapSizeCm: number; // e.g., 5 or 10 cm
   showClearanceZones: boolean;
   showDimensionsOnPlan: boolean;
-  enableExternalAi: boolean; // Explicit user opt-in required
-  aiProvider: 'local-heuristic' | 'custom-gemini-key' | 'disabled';
+  enableExternalAi: boolean; // Explicit user opt-in required for cloud AI
+  aiProvider: AiProviderType;
   customAiApiKey?: string;
+  ollamaBaseUrl?: string;    // e.g., 'http://localhost:11434'
+  ollamaModel?: string;      // e.g., 'llama3.2-vision'
+  gemmaModel?: string;       // e.g., 'paligemma:3b' or 'paligemma'
 }
 
-export interface FitProject {
+export interface HomeProject {
   id: string;
   name: string;
+  tagline?: string;
   createdAt: string;
   updatedAt: string;
-  room: RoomModel;
-  furniture: FurnitureItem[];
+  floors: FloorModel[];
+  rooms: RoomModel[];
+  activeRoomId: string;
+  activeFloorId: string;
   photoContext: PhotoContext;
   settings: AppSettings;
+  // Legacy single-room compatibility accessors
+  room?: RoomModel;
+  furniture?: FurnitureItem[];
 }
+
+// Backward compatibility alias for existing modules
+export type FitProject = HomeProject;
 
 // Fit-report semantics (strict adherence to requirements)
 export type FitStatus = 'PASS' | 'FAIL' | 'REVIEW' | 'NOT_CHECKED';
@@ -164,7 +234,7 @@ export type CheckCategory =
   | 'functional-clearance'
   | 'measurement-confidence';
 
-export interface FitCheckItem {
+export interface SpatialCheckItem {
   id: string;
   title: string;
   description: string;
@@ -176,6 +246,9 @@ export interface FitCheckItem {
   remedyRecommendation?: string;
 }
 
+// Backward-compatibility type alias
+export type FitCheckItem = SpatialCheckItem;
+
 export interface FitReport {
   overallStatus: FitStatus;
   generatedAt: string;
@@ -185,7 +258,7 @@ export interface FitReport {
     reviewCount: number;
     notCheckedCount: number;
   };
-  checks: FitCheckItem[];
+  checks: SpatialCheckItem[];
   disclaimer: string;
 }
 
@@ -194,3 +267,10 @@ export const MANDATORY_FIT_DISCLAIMER =
   "installation, structural safety, or compliance with building codes. " +
   "Always measure physical delivery paths (stairwells, doorways, elevators) " +
   "and consult a professional for structural or safety modifications.";
+
+export const DEFAULT_MATERIAL_FINISH: RoomMaterialFinish = {
+  wallColor: '#F5F2EB', // Warm Alabaster
+  wallFinish: 'matte',
+  floorType: 'hardwood_oak',
+  floorColor: '#C49A6C', // Warm Natural Oak
+};

@@ -230,6 +230,6 @@ export function createFurnitureFromCatalog(
     provenance: 'catalog',
     isConfirmed: true,
     price: template.estimatedPrice,
-    provenanceNotes: 'Added from FitCheck verified catalog specs.',
+    provenanceNotes: 'Added from ApnaGhar verified catalog specs.',
   };
 }

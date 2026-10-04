@@ -1,17 +1,23 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { 
-  FitProject, 
+  HomeProject, 
   FurnitureItem, 
   RoomModel, 
   PhotoContext, 
   AppSettings, 
-  UnitType 
+  UnitType,
+  RoomType,
+  RoomMaterialFinish,
+  DesignVariant
 } from './types/model';
 import { 
   loadActiveProject, 
   saveProject, 
   createNewProject, 
-  createSampleDemoProject 
+  createSampleDemoProject,
+  addRoomToHome,
+  deleteRoomFromHome,
+  duplicateRoomInHome
 } from './utils/storage';
 import { evaluateRoomFit } from './utils/fitEngine';
 import { Navbar } from './components/Navbar';
@@ -24,10 +30,13 @@ import { PhotoUploadModal } from './components/PhotoAI/PhotoUploadModal';
 import { ExportModal } from './components/ExportModal/ExportModal';
 import { SettingsModal } from './components/SettingsModal/SettingsModal';
 import { ProjectListModal } from './components/ProjectListModal/ProjectListModal';
+import { StylingModal } from './components/Styling/StylingModal';
+import { HomeOverviewModal } from './components/HomeOverview/HomeOverviewModal';
+import { Sparkles } from 'lucide-react';
 
 export const App: React.FC = () => {
-  // Canonical Project State
-  const [project, setProject] = useState<FitProject>(() => loadActiveProject());
+  // Canonical Multi-Room Home Project State
+  const [project, setProject] = useState<HomeProject>(() => loadActiveProject());
 
   // Active View: 2D Interactive Planner vs 3D Spatial Viewer
   const [activeView, setActiveView] = useState<'2d' | '3d'>('2d');
@@ -43,42 +52,177 @@ export const App: React.FC = () => {
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isProjectListOpen, setIsProjectListOpen] = useState(false);
+  const [isStylingOpen, setIsStylingOpen] = useState(false);
+  const [isHomeOverviewOpen, setIsHomeOverviewOpen] = useState(false);
 
   // Auto-save project whenever it changes
   useEffect(() => {
     saveProject(project);
   }, [project]);
 
-  // Pure geometric fit check evaluation (Independent of AI and rendering)
-  const fitReport = useMemo(() => {
-    return evaluateRoomFit(project.room, project.furniture);
-  }, [project.room, project.furniture]);
+  // Active Room Resolution
+  const activeRoom: RoomModel = useMemo(() => {
+    const found = project.rooms.find(r => r.id === project.activeRoomId);
+    return found || project.rooms[0] || project.room;
+  }, [project.rooms, project.activeRoomId, project.room]);
 
-  // Furniture updates
-  const handleUpdateFurniture = useCallback((items: FurnitureItem[]) => {
-    setProject(prev => ({
-      ...prev,
-      furniture: items,
-      updatedAt: new Date().toISOString(),
-    }));
+  // Active Furniture for current room
+  const activeFurniture: FurnitureItem[] = useMemo(() => {
+    return activeRoom.furniture || [];
+  }, [activeRoom.furniture]);
+
+  // Pure geometric fit check evaluation for active room
+  const fitReport = useMemo(() => {
+    return evaluateRoomFit(activeRoom, activeFurniture);
+  }, [activeRoom, activeFurniture]);
+
+  // Room switching
+  const handleSelectRoom = useCallback((roomId: string) => {
+    setProject(prev => {
+      const room = prev.rooms.find(r => r.id === roomId);
+      return {
+        ...prev,
+        activeRoomId: roomId,
+        activeFloorId: room?.floorId || prev.activeFloorId,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+    setSelectedItemId(null);
   }, []);
+
+  // Furniture updates in active room
+  const handleUpdateFurniture = useCallback((items: FurnitureItem[]) => {
+    setProject(prev => {
+      const updatedRooms = prev.rooms.map(r => 
+        r.id === activeRoom.id ? { ...r, furniture: items } : r
+      );
+      return {
+        ...prev,
+        rooms: updatedRooms,
+        furniture: items, // backward compat
+        updatedAt: new Date().toISOString(),
+      };
+    });
+  }, [activeRoom.id]);
 
   const handleAddFurniture = useCallback((item: FurnitureItem) => {
-    setProject(prev => ({
-      ...prev,
-      furniture: [...prev.furniture, item],
-      updatedAt: new Date().toISOString(),
-    }));
+    setProject(prev => {
+      const currentItems = activeRoom.furniture || [];
+      const nextItems = [...currentItems, item];
+      const updatedRooms = prev.rooms.map(r =>
+        r.id === activeRoom.id ? { ...r, furniture: nextItems } : r
+      );
+      return {
+        ...prev,
+        rooms: updatedRooms,
+        furniture: nextItems, // backward compat
+        updatedAt: new Date().toISOString(),
+      };
+    });
     setSelectedItemId(item.id);
+  }, [activeRoom.id, activeRoom.furniture]);
+
+  // Room specifications updates
+  const handleSaveRoom = useCallback((updatedRoom: RoomModel) => {
+    setProject(prev => {
+      const updatedRooms = prev.rooms.map(r =>
+        r.id === updatedRoom.id 
+          ? { ...updatedRoom, furniture: r.furniture, finishes: r.finishes, variants: r.variants } 
+          : r
+      );
+      return {
+        ...prev,
+        rooms: updatedRooms,
+        room: updatedRoom, // backward compat
+        updatedAt: new Date().toISOString(),
+      };
+    });
   }, []);
 
-  // Room geometry updates
-  const handleSaveRoom = useCallback((updatedRoom: RoomModel) => {
-    setProject(prev => ({
-      ...prev,
-      room: updatedRoom,
-      updatedAt: new Date().toISOString(),
-    }));
+  // Room material finishes update
+  const handleUpdateFinishes = useCallback((finishes: RoomMaterialFinish) => {
+    setProject(prev => {
+      const updatedRooms = prev.rooms.map(r =>
+        r.id === activeRoom.id ? { ...r, finishes } : r
+      );
+      return {
+        ...prev,
+        rooms: updatedRooms,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+  }, [activeRoom.id]);
+
+  // Design variants: Save current state as alternative
+  const handleSaveVariant = useCallback((variantName: string) => {
+    setProject(prev => {
+      const currentRoom = prev.rooms.find(r => r.id === activeRoom.id);
+      if (!currentRoom) return prev;
+      const newVariant: DesignVariant = {
+        id: `variant-${Date.now()}`,
+        name: variantName,
+        createdAt: new Date().toISOString(),
+        finishes: { ...(currentRoom.finishes || { wallColor: '#F5F2EB', wallFinish: 'matte', floorType: 'hardwood_oak', floorColor: '#C49A6C' }) },
+        furniture: JSON.parse(JSON.stringify(currentRoom.furniture || [])),
+      };
+      const updatedRooms = prev.rooms.map(r =>
+        r.id === currentRoom.id ? {
+          ...r,
+          variants: [...(r.variants || []), newVariant],
+        } : r
+      );
+      return {
+        ...prev,
+        rooms: updatedRooms,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+  }, [activeRoom.id]);
+
+  // Design variants: Apply saved variant
+  const handleApplyVariant = useCallback((variant: DesignVariant) => {
+    setProject(prev => {
+      const updatedRooms = prev.rooms.map(r =>
+        r.id === activeRoom.id ? {
+          ...r,
+          finishes: { ...variant.finishes },
+          furniture: JSON.parse(JSON.stringify(variant.furniture)),
+        } : r
+      );
+      return {
+        ...prev,
+        rooms: updatedRooms,
+        furniture: variant.furniture, // backward compat
+        updatedAt: new Date().toISOString(),
+      };
+    });
+  }, [activeRoom.id]);
+
+  // Add room to home
+  const handleAddRoom = useCallback((name: string, type: RoomType, floorId: string, width: number, length: number) => {
+    setProject(prev => {
+      const updated = addRoomToHome(prev, name, type, floorId, width, length);
+      return updated;
+    });
+    setSelectedItemId(null);
+  }, []);
+
+  // Delete room from home
+  const handleDeleteRoom = useCallback((roomId: string) => {
+    setProject(prev => {
+      const updated = deleteRoomFromHome(prev, roomId);
+      return updated;
+    });
+    setSelectedItemId(null);
+  }, []);
+
+  // Duplicate room in home
+  const handleDuplicateRoom = useCallback((roomId: string) => {
+    setProject(prev => {
+      const updated = duplicateRoomInHome(prev, roomId);
+      return updated;
+    });
+    setSelectedItemId(null);
   }, []);
 
   // Photo context updates
@@ -109,26 +253,39 @@ export const App: React.FC = () => {
 
   // Single Item Confirmation helper (from fit report or inspector)
   const handleConfirmItem = useCallback((itemId: string) => {
-    setProject(prev => ({
-      ...prev,
-      furniture: prev.furniture.map(f => f.id === itemId ? {
-        ...f,
-        isConfirmed: true,
-        provenance: 'manual',
-        provenanceNotes: 'Confirmed by user after review.',
-      } : f),
-    }));
-  }, []);
+    setProject(prev => {
+      const updatedRooms = prev.rooms.map(r => {
+        if (r.id !== activeRoom.id) return r;
+        const updatedFurniture = (r.furniture || []).map(f => f.id === itemId ? {
+          ...f,
+          isConfirmed: true,
+          provenance: 'manual' as const,
+          provenanceNotes: 'Confirmed by user after review.',
+        } : f);
+        return { ...r, furniture: updatedFurniture };
+      });
+      return {
+        ...prev,
+        rooms: updatedRooms,
+        furniture: (prev.furniture || []).map(f => f.id === itemId ? {
+          ...f,
+          isConfirmed: true,
+          provenance: 'manual' as const,
+          provenanceNotes: 'Confirmed by user after review.',
+        } : f),
+      };
+    });
+  }, [activeRoom.id]);
 
   // Load new or imported project
-  const handleLoadProject = useCallback((newProject: FitProject) => {
+  const handleLoadProject = useCallback((newProject: HomeProject) => {
     setProject(newProject);
     setSelectedItemId(null);
   }, []);
 
   // Create new project
-  const handleCreateNewProject = useCallback((name: string, width: number, length: number) => {
-    const fresh = createNewProject(name, width, length);
+  const handleCreateNewProject = useCallback((name: string) => {
+    const fresh = createNewProject(name);
     setProject(fresh);
     saveProject(fresh);
     setSelectedItemId(null);
@@ -137,7 +294,7 @@ export const App: React.FC = () => {
   // Reset & Purge all local data
   const handlePurgeAllData = useCallback(() => {
     localStorage.clear();
-    const demo = createSampleDemoProject('living');
+    const demo = createSampleDemoProject();
     setProject(demo);
     saveProject(demo);
     setSelectedItemId(null);
@@ -150,17 +307,21 @@ export const App: React.FC = () => {
       width: '100vw',
       height: '100vh',
       overflow: 'hidden',
-      background: 'var(--bg-darkest)',
+      background: 'var(--bg-canvas)',
     }}>
       {/* Top Header & Navigation */}
       <Navbar
         project={project}
+        activeRoom={activeRoom}
         activeView={activeView}
         onViewChange={setActiveView}
+        onSelectRoom={handleSelectRoom}
+        onOpenHomeOverview={() => setIsHomeOverviewOpen(true)}
         onOpenCatalog={() => setIsCatalogOpen(true)}
         onOpenRoomSetup={() => setIsRoomSetupOpen(true)}
         onOpenPhotoAI={() => setIsPhotoAIOpen(true)}
         onOpenFitReport={() => setIsFitReportOpen(true)}
+        onOpenStyling={() => setIsStylingOpen(true)}
         onOpenExport={() => setIsExportOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenProjectList={() => setIsProjectListOpen(true)}
@@ -170,10 +331,77 @@ export const App: React.FC = () => {
 
       {/* Main View Area (2D Planner or 3D Spatial Visualizer) */}
       <main style={{ flex: 1, position: 'relative', width: '100%', height: 'calc(100vh - 62px)', overflow: 'hidden' }}>
+        {/* Priority 2: Prominent "Analyze My Room" Primary CTA Banner */}
+        <div 
+          className="analyze-room-cta-banner glass-panel" 
+          style={{
+            position: 'absolute',
+            top: '16px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 25,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '14px',
+            padding: '8px 16px',
+            borderRadius: 'var(--radius-lg)',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.75)',
+            border: '1px solid rgba(194, 109, 83, 0.4)',
+            maxWidth: 'min(94vw, 600px)',
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Sparkles size={14} className="text-terracotta" />
+              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                Room Assistant
+              </span>
+              {project.photoContext.hasPhoto && (
+                <span style={{
+                  fontSize: '0.65rem',
+                  padding: '1px 6px',
+                  borderRadius: '4px',
+                  background: 'rgba(16, 185, 129, 0.15)',
+                  color: '#34d399',
+                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                  fontWeight: 600,
+                }}>
+                  Photo Active
+                </span>
+              )}
+            </div>
+            <p style={{
+              fontSize: '0.725rem',
+              color: 'var(--text-muted)',
+              margin: '2px 0 0 0',
+              lineHeight: 1.35,
+              whiteSpace: 'normal',
+            }}>
+              Upload a photo, take a picture, or record a room walkthrough to explore design possibilities.
+            </p>
+          </div>
+          <button
+            id="btn-analyze-my-room"
+            onClick={() => setIsPhotoAIOpen(true)}
+            className="btn btn-primary"
+            style={{
+              whiteSpace: 'nowrap',
+              padding: '8px 16px',
+              fontSize: '0.825rem',
+              fontWeight: 600,
+              gap: '6px',
+              flexShrink: 0,
+            }}
+          >
+            <Sparkles size={14} />
+            <span>Analyze My Room</span>
+          </button>
+        </div>
+
         {activeView === '2d' ? (
           <Canvas2D
-            room={project.room}
-            furniture={project.furniture}
+            room={activeRoom}
+            furniture={activeFurniture}
             settings={project.settings}
             fitReport={fitReport}
             onUpdateFurniture={handleUpdateFurniture}
@@ -182,12 +410,13 @@ export const App: React.FC = () => {
           />
         ) : (
           <ThreeViewer
-            room={project.room}
-            furniture={project.furniture}
+            room={activeRoom}
+            furniture={activeFurniture}
             fitReport={fitReport}
             displayUnit={project.settings.displayUnit}
             selectedItemId={selectedItemId}
             onSelectItem={item => setSelectedItemId(item ? item.id : null)}
+            onUpdateFurniture={handleUpdateFurniture}
           />
         )}
       </main>
@@ -197,7 +426,7 @@ export const App: React.FC = () => {
         isOpen={isFitReportOpen}
         onClose={() => setIsFitReportOpen(false)}
         report={fitReport}
-        furniture={project.furniture}
+        furniture={activeFurniture}
         onSelectItem={id => {
           setSelectedItemId(id);
           setActiveView('2d');
@@ -208,7 +437,7 @@ export const App: React.FC = () => {
       <CatalogDrawer
         isOpen={isCatalogOpen}
         onClose={() => setIsCatalogOpen(false)}
-        room={project.room}
+        room={activeRoom}
         displayUnit={project.settings.displayUnit}
         onAddFurniture={handleAddFurniture}
       />
@@ -216,15 +445,35 @@ export const App: React.FC = () => {
       <RoomModal
         isOpen={isRoomSetupOpen}
         onClose={() => setIsRoomSetupOpen(false)}
-        room={project.room}
+        room={activeRoom}
         displayUnit={project.settings.displayUnit}
         onSaveRoom={handleSaveRoom}
+      />
+
+      <StylingModal
+        isOpen={isStylingOpen}
+        onClose={() => setIsStylingOpen(false)}
+        room={activeRoom}
+        onUpdateFinishes={handleUpdateFinishes}
+        onSaveVariant={handleSaveVariant}
+        onApplyVariant={handleApplyVariant}
+      />
+
+      <HomeOverviewModal
+        isOpen={isHomeOverviewOpen}
+        onClose={() => setIsHomeOverviewOpen(false)}
+        project={project}
+        displayUnit={project.settings.displayUnit}
+        onSelectRoom={handleSelectRoom}
+        onAddRoom={handleAddRoom}
+        onDeleteRoom={handleDeleteRoom}
+        onDuplicateRoom={handleDuplicateRoom}
       />
 
       <PhotoUploadModal
         isOpen={isPhotoAIOpen}
         onClose={() => setIsPhotoAIOpen(false)}
-        room={project.room}
+        room={activeRoom}
         photoContext={project.photoContext}
         settings={project.settings}
         displayUnit={project.settings.displayUnit}
@@ -254,7 +503,6 @@ export const App: React.FC = () => {
         onClose={() => setIsProjectListOpen(false)}
         activeProjectId={project.id}
         onSelectProject={id => {
-          // Find and load project if available
           const loaded = loadActiveProject();
           if (loaded.id === id) setProject(loaded);
         }}

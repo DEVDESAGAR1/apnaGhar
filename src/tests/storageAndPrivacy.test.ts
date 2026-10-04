@@ -118,7 +118,7 @@ describe('Storage & Privacy Suite', () => {
 
   it('validates imported JSON structure and guards against malformed input', () => {
     expect(() => importProjectJson('not valid json')).toThrow();
-    expect(() => importProjectJson('{"empty": true}')).toThrow('Invalid FitCheck project file');
+    expect(() => importProjectJson('{"empty": true}')).toThrow('Invalid ApnaGhar project file');
 
     const validExport = exportProjectJson(createSampleDemoProject('living'));
     const imported = importProjectJson(validExport);

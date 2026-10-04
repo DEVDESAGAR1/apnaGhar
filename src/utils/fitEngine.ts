@@ -2,7 +2,7 @@ import { MANDATORY_FIT_DISCLAIMER } from '../types/model';
 import type { 
   FitReport, 
   FitStatus, 
-  FitCheckItem, 
+  SpatialCheckItem, 
   RoomModel, 
   FurnitureItem 
 } from '../types/model';
@@ -15,11 +15,11 @@ import {
 } from './geometry';
 
 /**
- * FitCheck Geometric Evaluation Engine
+ * ApnaGhar Geometric Evaluation Engine
  * Pure logic independent of any AI or rendering framework.
  */
 export function evaluateRoomFit(room: RoomModel, furniture: FurnitureItem[]): FitReport {
-  const checks: FitCheckItem[] = [];
+  const checks: SpatialCheckItem[] = [];
 
   // 1. Room Dimension Validity Check
   if (!room || room.width <= 0 || room.length <= 0 || room.height <= 0) {

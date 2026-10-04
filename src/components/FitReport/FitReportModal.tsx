@@ -53,7 +53,7 @@ export const FitReportModal: React.FC<FitReportModalProps> = ({
 
   const handleCopyReport = () => {
     const text = [
-      `# FitCheck Geometric Validation Report`,
+      `# ApnaGhar (अपना घर) — Spatial Fit Validation Report`,
       `Overall Status: ${report.overallStatus}`,
       `Generated: ${new Date(report.generatedAt).toLocaleString()}`,
       `Summary: ${report.summary.passCount} PASS, ${report.summary.failCount} FAIL, ${report.summary.reviewCount} REVIEW, ${report.summary.notCheckedCount} NOT CHECKED`,
