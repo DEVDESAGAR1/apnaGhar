@@ -97,16 +97,33 @@ export interface RoomOpening {
 export type FloorType = 
   | 'hardwood_oak' 
   | 'hardwood_walnut' 
+  | 'hardwood_ash'
+  | 'dark_wood'
+  | 'bamboo_cane'
   | 'herringbone_parquet' 
   | 'polished_concrete' 
+  | 'exposed_brick'
+  | 'natural_stone'
+  | 'marble_carrara'
   | 'limestone_tile' 
-  | 'terrazzo';
+  | 'terrazzo'
+  | 'ceramic_tile'
+  | 'jute_carpet';
+
+export type WallFinishType = 'matte' | 'satin' | 'limewash' | 'textured_plaster' | 'exposed_brick';
 
 export interface RoomMaterialFinish {
   wallColor: string; // hex (e.g. #F5F2EB for warm alabaster)
-  wallFinish: 'matte' | 'satin' | 'limewash';
+  wallFinish: WallFinishType;
   floorType: FloorType;
   floorColor: string; // hex
+  accentWallColor?: string; // hex secondary wall
+  trimColor?: string; // hex door frames, window sills, baseboards
+  ceilingColor?: string; // hex ceiling
+  cabinetryColor?: string; // hex built-in cabinets
+  furnitureAccentColor?: string; // hex metal or textile accent
+  paletteId?: string; // associated palette preset
+  styleId?: string; // associated interior design style preset
 }
 
 export interface DesignVariant {
@@ -150,6 +167,74 @@ export interface FloorModel {
   level: number; // 0 = Ground Floor, 1 = First Floor, -1 = Basement, etc.
 }
 
+export type ImageSuitability = 'suitable' | 'partially_suitable' | 'unsuitable' | 'uncertain' | 'ai_unavailable';
+
+export interface ImageValidationResult {
+  validFile: boolean;
+  fileError?: string;
+  dimensions?: { width: number; height: number };
+  suitability: ImageSuitability;
+  isIndoorInterior: boolean;
+  roomType?: string;
+  qualityIssues: string[]; // 'darkness' | 'blur' | 'heavy_cropping' | 'obstruction' | 'glare' | 'low_resolution' | 'unrelated_subject'
+  explanation: string;
+  recommendedAction: string;
+  confidence?: number; // 0.0 - 1.0 (calibrated)
+}
+
+export interface UserDesignGoal {
+  primaryGoal?: 'improve-circulation' | 'maximize-storage' | 'cozy-aesthetic' | 'work-study-zone' | 'open-space' | 'general';
+  preferredStyle?: string;
+  budget?: 'zero-cost' | 'low-cost' | 'moderate' | 'flexible';
+  furnitureStrategy?: 'keep-all-existing' | 'open-to-few-additions' | 'complete-makeover';
+  accessibilityNeeds?: string;
+}
+
+export interface ExistingFurnitureReviewItem {
+  id: string;
+  name: string;
+  apparentRole: string;
+  placementStatus: 'useful' | 'inefficient' | 'obstructive' | 'uncertain';
+  recommendation: 'keep' | 'move' | 'rotate' | 'reposition' | 'declutter' | 'consider-replacing';
+  reason: string;
+  additionalInfoNeeded: string;
+  estimatedItem?: PhotoDetectionSuggestion;
+}
+
+export interface PersonalizedRecommendation {
+  id: string;
+  category: 'keep' | 'rearrange' | 'add' | 'improve' | 'replace' | 'avoid';
+  priority: 'high' | 'medium' | 'low';
+  action: string;
+  reason: string;
+  expectedBenefit: string;
+  effortCost: 'free' | 'low-cost' | 'purchase-required';
+  requiredMeasurements: string;
+  status: 'ready' | 'needs-info';
+  targetItemId?: string;
+  suggestedAddition?: Partial<FurnitureItem>;
+}
+
+export interface DetailedRoomAnalysis {
+  validation: ImageValidationResult;
+  roomCharacteristics?: {
+    roomType: string;
+    functionalZones: string[];
+    architecturalFeatures: string[];
+    dominantColours: string[];
+    materials: string[];
+    apparentStyle: string;
+    lighting: string;
+    congestion: 'spacious' | 'moderate' | 'congested';
+    limitations: string[];
+  };
+  detectedItems: PhotoDetectionSuggestion[];
+  existingFurnitureReview: ExistingFurnitureReviewItem[];
+  recommendations: PersonalizedRecommendation[];
+  measurementChecklist: string[];
+  userGoal?: UserDesignGoal;
+}
+
 export interface PhotoDetectionSuggestion {
   id: string;
   label: string;
@@ -163,6 +248,10 @@ export interface PhotoDetectionSuggestion {
   confidence: number;      // 0.0 - 1.0
   color: string;
   modelType: string;
+  visualDescription?: string;
+  imagePosition?: string; // e.g. 'foreground-left', 'center', 'background-right'
+  relativeSize?: 'compact' | 'medium' | 'large' | 'oversized';
+  isFixed?: boolean; // true for built-in fixtures, false for movable items
   box2D?: {
     x: number;      // normalized 0..1 in photo
     y: number;
@@ -179,6 +268,9 @@ export interface PhotoContext {
   uploadedAt?: string;
   imageDimensions?: { width: number; height: number };
   detectedSuggestions?: PhotoDetectionSuggestion[];
+  validationResult?: ImageValidationResult;
+  detailedAnalysis?: DetailedRoomAnalysis;
+  userGoal?: UserDesignGoal;
   privacyConsentAcknowledged: boolean;
 }
 
@@ -204,6 +296,17 @@ export interface AppSettings {
   gemmaModel?: string;       // e.g., 'paligemma:3b' or 'paligemma'
 }
 
+export interface WholeHomeStyleConfig {
+  preferredStyleId?: string;
+  paletteId?: string;
+  primaryWallColor?: string;
+  accentWallColor?: string;
+  trimColor?: string;
+  ceilingColor?: string;
+  floorType?: FloorType;
+  floorColor?: string;
+}
+
 export interface HomeProject {
   id: string;
   name: string;
@@ -216,6 +319,8 @@ export interface HomeProject {
   activeFloorId: string;
   photoContext: PhotoContext;
   settings: AppSettings;
+  wholeHomeStyling?: WholeHomeStyleConfig;
+  isSample?: boolean;
   // Legacy single-room compatibility accessors
   room?: RoomModel;
   furniture?: FurnitureItem[];

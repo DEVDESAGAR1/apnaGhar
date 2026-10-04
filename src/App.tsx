@@ -8,16 +8,22 @@ import type {
   UnitType,
   RoomType,
   RoomMaterialFinish,
-  DesignVariant
+  DesignVariant,
+  WholeHomeStyleConfig
 } from './types/model';
 import { 
   loadActiveProject, 
+  loadProjectById,
   saveProject, 
   createNewProject, 
   createSampleDemoProject,
+  deleteProject,
   addRoomToHome,
   deleteRoomFromHome,
-  duplicateRoomInHome
+  duplicateRoomInHome,
+  renameRoomInHome,
+  reorderRoomsInHome,
+  applyWholeHomeStyling
 } from './utils/storage';
 import { evaluateRoomFit } from './utils/fitEngine';
 import { Navbar } from './components/Navbar';
@@ -300,6 +306,51 @@ export const App: React.FC = () => {
     setSelectedItemId(null);
   }, []);
 
+  // Switch to another project by ID
+  const handleSelectProject = useCallback((projectId: string) => {
+    const loaded = loadProjectById(projectId);
+    if (loaded) {
+      setProject(loaded);
+      setSelectedItemId(null);
+    }
+  }, []);
+
+  // Delete project
+  const handleDeleteProject = useCallback((projectId: string) => {
+    deleteProject(projectId);
+  }, []);
+
+  // Rename room in home
+  const handleRenameRoom = useCallback((roomId: string, newName: string) => {
+    setProject(prev => {
+      const updated = renameRoomInHome(prev, roomId, newName);
+      saveProject(updated);
+      return updated;
+    });
+  }, []);
+
+  // Reorder rooms in home
+  const handleReorderRooms = useCallback((newOrderedRoomIds: string[]) => {
+    setProject(prev => {
+      const updated = reorderRoomsInHome(prev, newOrderedRoomIds);
+      saveProject(updated);
+      return updated;
+    });
+  }, []);
+
+  // Apply whole-home styling across rooms
+  const handleApplyWholeHomeStyling = useCallback((
+    stylingConfig: WholeHomeStyleConfig,
+    targetRoomIds?: string[],
+    preserveCustomizedRooms?: boolean
+  ) => {
+    setProject(prev => {
+      const updated = applyWholeHomeStyling(prev, stylingConfig, targetRoomIds, preserveCustomizedRooms);
+      saveProject(updated);
+      return updated;
+    });
+  }, []);
+
   return (
     <div style={{
       display: 'flex',
@@ -354,9 +405,22 @@ export const App: React.FC = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Sparkles size={14} className="text-terracotta" />
               <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)' }}>
-                Room Assistant
+                {project.isSample ? 'Sample Demonstration Layout' : 'Room Assistant'}
               </span>
-              {project.photoContext.hasPhoto && (
+              {project.isSample && (
+                <span style={{
+                  fontSize: '0.65rem',
+                  padding: '1px 6px',
+                  borderRadius: '4px',
+                  background: 'rgba(59, 130, 246, 0.2)',
+                  color: '#60a5fa',
+                  border: '1px solid rgba(59, 130, 246, 0.35)',
+                  fontWeight: 700,
+                }}>
+                  SAMPLE / DEMO
+                </span>
+              )}
+              {project.photoContext.hasPhoto && !project.isSample && (
                 <span style={{
                   fontSize: '0.65rem',
                   padding: '1px 6px',
@@ -377,25 +441,42 @@ export const App: React.FC = () => {
               lineHeight: 1.35,
               whiteSpace: 'normal',
             }}>
-              Upload a photo, take a picture, or record a room walkthrough to explore design possibilities.
+              {project.isSample 
+                ? 'Predefined demonstration data. You can freely edit furniture, or upload your own real room photo.'
+                : 'Upload a room photo to evaluate spatial fit, or browse sample rooms without uploading.'
+              }
             </p>
           </div>
-          <button
-            id="btn-analyze-my-room"
-            onClick={() => setIsPhotoAIOpen(true)}
-            className="btn btn-primary"
-            style={{
-              whiteSpace: 'nowrap',
-              padding: '8px 16px',
-              fontSize: '0.825rem',
-              fontWeight: 600,
-              gap: '6px',
-              flexShrink: 0,
-            }}
-          >
-            <Sparkles size={14} />
-            <span>Analyze My Room</span>
-          </button>
+          <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+            <button
+              id="btn-analyze-my-room"
+              onClick={() => setIsPhotoAIOpen(true)}
+              className="btn btn-primary"
+              style={{
+                whiteSpace: 'nowrap',
+                padding: '8px 14px',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                gap: '6px',
+              }}
+            >
+              <Sparkles size={14} />
+              <span>Design My Room</span>
+            </button>
+            <button
+              id="btn-explore-samples"
+              onClick={() => setIsProjectListOpen(true)}
+              className="btn btn-secondary"
+              style={{
+                whiteSpace: 'nowrap',
+                padding: '8px 12px',
+                fontSize: '0.8rem',
+                gap: '6px',
+              }}
+            >
+              <span>Explore Samples</span>
+            </button>
+          </div>
         </div>
 
         {activeView === '2d' ? (
@@ -454,9 +535,11 @@ export const App: React.FC = () => {
         isOpen={isStylingOpen}
         onClose={() => setIsStylingOpen(false)}
         room={activeRoom}
+        project={project}
         onUpdateFinishes={handleUpdateFinishes}
         onSaveVariant={handleSaveVariant}
         onApplyVariant={handleApplyVariant}
+        onApplyWholeHomeStyling={handleApplyWholeHomeStyling}
       />
 
       <HomeOverviewModal
@@ -468,6 +551,9 @@ export const App: React.FC = () => {
         onAddRoom={handleAddRoom}
         onDeleteRoom={handleDeleteRoom}
         onDuplicateRoom={handleDuplicateRoom}
+        onRenameRoom={handleRenameRoom}
+        onReorderRooms={handleReorderRooms}
+        onOpenStyling={() => setIsStylingOpen(true)}
       />
 
       <PhotoUploadModal
@@ -479,6 +565,7 @@ export const App: React.FC = () => {
         displayUnit={project.settings.displayUnit}
         onUpdatePhotoContext={handleUpdatePhotoContext}
         onAddFurniture={handleAddFurniture}
+        onUpdateFurniture={handleUpdateFurniture}
       />
 
       <ExportModal
@@ -502,11 +589,9 @@ export const App: React.FC = () => {
         isOpen={isProjectListOpen}
         onClose={() => setIsProjectListOpen(false)}
         activeProjectId={project.id}
-        onSelectProject={id => {
-          const loaded = loadActiveProject();
-          if (loaded.id === id) setProject(loaded);
-        }}
+        onSelectProject={handleSelectProject}
         onCreateNewProject={handleCreateNewProject}
+        onDeleteProject={handleDeleteProject}
       />
     </div>
   );

@@ -196,27 +196,121 @@ export const Canvas2D: React.FC<Canvas2DProps> = ({
     const roomScreenW = room.width * zoom;
     const roomScreenL = room.length * zoom;
 
-    // Floor fill
-    ctx.fillStyle = '#0f1422';
+    // Floor fill & material finish
+    const floorColor = room.finishes?.floorColor || '#0f1422';
+    ctx.fillStyle = floorColor;
     ctx.fillRect(roomScreenOrigin.x, roomScreenOrigin.y, roomScreenW, roomScreenL);
 
-    // Subtle hardwood-style plank lines or grid on floor
-    ctx.strokeStyle = 'rgba(56, 189, 248, 0.05)';
-    ctx.lineWidth = 1;
+    // Floor texture pattern based on floorType
+    const floorType = room.finishes?.floorType || 'hardwood_oak';
+    ctx.save();
     ctx.beginPath();
-    for (let rx = 50; rx < room.width; rx += 50) {
-      const p1 = roomToScreen(rx, 0);
-      const p2 = roomToScreen(rx, room.length);
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
+    ctx.rect(roomScreenOrigin.x, roomScreenOrigin.y, roomScreenW, roomScreenL);
+    ctx.clip();
+
+    if (floorType.includes('hardwood') || floorType === 'dark_wood' || floorType === 'bamboo_cane') {
+      // Wood plank pattern
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.12)';
+      ctx.lineWidth = 1;
+      const plankW = 30; // 30cm planks
+      ctx.beginPath();
+      for (let rx = plankW; rx < room.width; rx += plankW) {
+        const p1 = roomToScreen(rx, 0);
+        const p2 = roomToScreen(rx, room.length);
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+      }
+      ctx.stroke();
+
+      // Staggered plank joints
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.08)';
+      ctx.beginPath();
+      let col = 0;
+      for (let rx = 0; rx < room.width; rx += plankW) {
+        const offset = (col % 3) * 50;
+        for (let ry = offset; ry < room.length; ry += 120) {
+          const pt1 = roomToScreen(rx, ry);
+          const pt2 = roomToScreen(rx + plankW, ry);
+          ctx.moveTo(pt1.x, pt1.y);
+          ctx.lineTo(pt2.x, pt2.y);
+        }
+        col++;
+      }
+      ctx.stroke();
+    } else if (floorType === 'herringbone_parquet') {
+      // Chevron pattern
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let rx = -room.length; rx < room.width + room.length; rx += 35) {
+        const p1 = roomToScreen(rx, 0);
+        const p2 = roomToScreen(rx + room.length, room.length);
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+      }
+      ctx.stroke();
+    } else if (floorType.includes('tile') || floorType === 'limestone_tile' || floorType === 'ceramic_tile' || floorType === 'natural_stone') {
+      // Large-format tile grid
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
+      ctx.lineWidth = 1.5;
+      const tileSize = 60;
+      ctx.beginPath();
+      for (let rx = tileSize; rx < room.width; rx += tileSize) {
+        const p1 = roomToScreen(rx, 0);
+        const p2 = roomToScreen(rx, room.length);
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+      }
+      for (let ry = tileSize; ry < room.length; ry += tileSize) {
+        const p1 = roomToScreen(0, ry);
+        const p2 = roomToScreen(room.width, ry);
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+      }
+      ctx.stroke();
+    } else if (floorType === 'exposed_brick') {
+      // Brick paver pattern
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
+      ctx.lineWidth = 1;
+      const brickH = 15;
+      const brickW = 30;
+      ctx.beginPath();
+      let row = 0;
+      for (let ry = brickH; ry < room.length; ry += brickH) {
+        const p1 = roomToScreen(0, ry);
+        const p2 = roomToScreen(room.width, ry);
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        const shift = (row % 2) * (brickW / 2);
+        for (let rx = shift; rx < room.width; rx += brickW) {
+          const v1 = roomToScreen(rx, ry - brickH);
+          const v2 = roomToScreen(rx, ry);
+          ctx.moveTo(v1.x, v1.y);
+          ctx.lineTo(v2.x, v2.y);
+        }
+        row++;
+      }
+      ctx.stroke();
+    } else {
+      // Default architectural grid
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let rx = 50; rx < room.width; rx += 50) {
+        const p1 = roomToScreen(rx, 0);
+        const p2 = roomToScreen(rx, room.length);
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+      }
+      for (let ry = 50; ry < room.length; ry += 50) {
+        const p1 = roomToScreen(0, ry);
+        const p2 = roomToScreen(room.width, ry);
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+      }
+      ctx.stroke();
     }
-    for (let ry = 50; ry < room.length; ry += 50) {
-      const p1 = roomToScreen(0, ry);
-      const p2 = roomToScreen(room.width, ry);
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
-    }
-    ctx.stroke();
+    ctx.restore();
 
     // 3. Draw Doors and Swing Arcs
     const doors = (room.openings || []).filter(o => o.type === 'door');
@@ -412,11 +506,24 @@ export const Canvas2D: React.FC<Canvas2DProps> = ({
       ctx.setLineDash([]);
     }
 
-    // 7. Draw Room Boundary Walls
+    // 7. Draw Room Boundary Walls with Finishes
     const wallThickPx = (room.wallThickness || 15) * zoom;
-    ctx.strokeStyle = '#334155';
+    const wallColor = room.finishes?.wallColor || '#334155';
+    ctx.strokeStyle = wallColor;
     ctx.lineWidth = Math.max(3, wallThickPx);
     ctx.strokeRect(roomScreenOrigin.x, roomScreenOrigin.y, roomScreenW, roomScreenL);
+
+    // Accent Wall: If accentWallColor is specified, highlight the North Wall (x=0..width, y=0)
+    if (room.finishes?.accentWallColor) {
+      ctx.strokeStyle = room.finishes.accentWallColor;
+      ctx.lineWidth = Math.max(4, wallThickPx + 3);
+      ctx.beginPath();
+      const nwStart = roomToScreen(0, 0);
+      const nwEnd = roomToScreen(room.width, 0);
+      ctx.moveTo(nwStart.x, nwStart.y);
+      ctx.lineTo(nwEnd.x, nwEnd.y);
+      ctx.stroke();
+    }
 
     // Outer boundary glow
     ctx.strokeStyle = 'rgba(56, 189, 248, 0.2)';

@@ -9,8 +9,10 @@ import type {
 import { DEFAULT_MATERIAL_FINISH } from '../types/model';
 import { FURNITURE_CATALOG, createFurnitureFromCatalog } from './catalog';
 
+const STORAGE_KEY_CURRENT_HOME_ID = 'apnaghar_active_home_id';
 const STORAGE_KEY_CURRENT_HOME = 'apnaghar_active_home';
 const STORAGE_KEY_HOME_LIST = 'apnaghar_home_index';
+const STORAGE_PROJECT_PREFIX = 'apnaghar_project_';
 const LEGACY_STORAGE_KEY = 'fitcheck_active_project';
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -423,6 +425,7 @@ export function createSampleHomeProject(): HomeProject {
     activeFloorId: floorGround.id,
     photoContext: { ...DEFAULT_EMPTY_PHOTO_CONTEXT },
     settings: { ...DEFAULT_SETTINGS },
+    isSample: true,
     room: livingRoom,
     furniture: livingRoom.furniture,
   };
@@ -520,36 +523,35 @@ export function duplicateRoomInHome(project: HomeProject, roomId: string): HomeP
 }
 
 /**
- * Save project to browser local storage
+ * Save project to browser local storage with per-project isolation
  */
 export function saveProject(project: HomeProject): void {
   try {
     project.updatedAt = new Date().toISOString();
 
-    // If top-level furniture was manipulated directly, keep activeRoom synced
+    // Canonical source of truth is project.rooms
+    // Update active room backward-compat pointers cleanly without mutating other rooms
     const active = project.rooms.find(r => r.id === project.activeRoomId) || project.rooms[0];
-    if (active && Array.isArray(project.furniture)) {
-      active.furniture = project.furniture;
-    }
-    if (active && project.room) {
-      active.width = project.room.width;
-      active.length = project.room.length;
-      active.height = project.room.height;
-      active.name = project.room.name;
-      active.openings = project.room.openings;
-    }
     if (active) {
       project.room = active;
       project.furniture = active.furniture || [];
     }
 
     const serialized = JSON.stringify(project);
+
+    // 1. Save to individual isolated project key
+    localStorage.setItem(`${STORAGE_PROJECT_PREFIX}${project.id}`, serialized);
+
+    // 2. Track current active home project ID
+    localStorage.setItem(STORAGE_KEY_CURRENT_HOME_ID, project.id);
+
+    // 3. Keep current home & legacy keys updated for backward compatibility
     localStorage.setItem(STORAGE_KEY_CURRENT_HOME, serialized);
     localStorage.setItem(LEGACY_STORAGE_KEY, serialized);
 
-    // Update project directory index
+    // 4. Update project directory index
     const indexStr = localStorage.getItem(STORAGE_KEY_HOME_LIST);
-    let index: { id: string; name: string; updatedAt: string; roomCount: number; itemCount: number }[] = [];
+    let index: { id: string; name: string; updatedAt: string; roomCount: number; itemCount: number; isSample?: boolean }[] = [];
     if (indexStr) {
       try {
         index = JSON.parse(indexStr);
@@ -566,6 +568,7 @@ export function saveProject(project: HomeProject): void {
       updatedAt: project.updatedAt,
       roomCount: project.rooms.length,
       itemCount: totalItems,
+      isSample: Boolean(project.isSample),
     };
 
     if (existingIdx >= 0) {
@@ -581,14 +584,71 @@ export function saveProject(project: HomeProject): void {
 }
 
 /**
+ * Load project by its unique ID
+ */
+export function loadProjectById(id: string): HomeProject | null {
+  try {
+    const raw = localStorage.getItem(`${STORAGE_PROJECT_PREFIX}${id}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const migrated = migrateToHomeProject(parsed);
+      return migrated;
+    }
+  } catch (err) {
+    console.warn(`Could not load project with id ${id}`, err);
+  }
+  return null;
+}
+
+/**
+ * Delete a project by ID from storage and index
+ */
+export function deleteProject(id: string): HomeProject {
+  try {
+    localStorage.removeItem(`${STORAGE_PROJECT_PREFIX}${id}`);
+    const indexStr = localStorage.getItem(STORAGE_KEY_HOME_LIST);
+    let nextActiveId: string | null = null;
+    if (indexStr) {
+      const index = JSON.parse(indexStr).filter((p: any) => p.id !== id);
+      localStorage.setItem(STORAGE_KEY_HOME_LIST, JSON.stringify(index));
+      if (index.length > 0) {
+        nextActiveId = index[0].id;
+      }
+    }
+
+    if (nextActiveId) {
+      const nextActive = loadProjectById(nextActiveId);
+      if (nextActive) {
+        saveProject(nextActive);
+        return nextActive;
+      }
+    }
+  } catch (err) {
+    console.error('Failed to delete project', err);
+  }
+
+  const fresh = createSampleHomeProject();
+  saveProject(fresh);
+  return fresh;
+}
+
+/**
  * Load active project from localStorage or return default sample home
  */
 export function loadActiveProject(): HomeProject {
   try {
+    const activeId = localStorage.getItem(STORAGE_KEY_CURRENT_HOME_ID);
+    if (activeId) {
+      const proj = loadProjectById(activeId);
+      if (proj) return proj;
+    }
+
     const serialized = localStorage.getItem(STORAGE_KEY_CURRENT_HOME) || localStorage.getItem(LEGACY_STORAGE_KEY);
     if (serialized) {
       const parsed = JSON.parse(serialized);
-      return migrateToHomeProject(parsed);
+      const migrated = migrateToHomeProject(parsed);
+      saveProject(migrated);
+      return migrated;
     }
   } catch (err) {
     console.warn('Could not parse stored project, starting with sample home.', err);
@@ -600,9 +660,91 @@ export function loadActiveProject(): HomeProject {
 }
 
 /**
+ * Rename a room inside a home project
+ */
+export function renameRoomInHome(project: HomeProject, roomId: string, newName: string): HomeProject {
+  const trimmed = newName.trim();
+  if (!trimmed) return project;
+  const updatedRooms = project.rooms.map(r => r.id === roomId ? { ...r, name: trimmed } : r);
+  const updated: HomeProject = {
+    ...project,
+    rooms: updatedRooms,
+    updatedAt: new Date().toISOString(),
+  };
+  saveProject(updated);
+  return updated;
+}
+
+/**
+ * Reorder rooms in a home project
+ */
+export function reorderRoomsInHome(project: HomeProject, orderedRoomIds: string[]): HomeProject {
+  const roomMap = new Map(project.rooms.map(r => [r.id, r]));
+  const reordered: RoomModel[] = [];
+  for (const id of orderedRoomIds) {
+    const r = roomMap.get(id);
+    if (r) {
+      reordered.push(r);
+      roomMap.delete(id);
+    }
+  }
+  for (const remaining of roomMap.values()) {
+    reordered.push(remaining);
+  }
+  const updated: HomeProject = {
+    ...project,
+    rooms: reordered,
+    updatedAt: new Date().toISOString(),
+  };
+  saveProject(updated);
+  return updated;
+}
+
+/**
+ * Apply whole-home styling configuration to rooms
+ */
+export function applyWholeHomeStyling(
+  project: HomeProject,
+  config: import('../types/model').WholeHomeStyleConfig,
+  scope: 'all' | 'selected' = 'all',
+  targetRoomIds?: string[]
+): HomeProject {
+  const targets = new Set(scope === 'all' ? project.rooms.map(r => r.id) : (targetRoomIds || []));
+  const updatedRooms = project.rooms.map(room => {
+    if (!targets.has(room.id)) return room;
+    return {
+      ...room,
+      finishes: {
+        ...room.finishes,
+        wallColor: config.primaryWallColor || room.finishes.wallColor,
+        accentWallColor: config.accentWallColor || room.finishes.accentWallColor,
+        trimColor: config.trimColor || room.finishes.trimColor,
+        ceilingColor: config.ceilingColor || room.finishes.ceilingColor,
+        floorType: config.floorType || room.finishes.floorType,
+        floorColor: config.floorColor || room.finishes.floorColor,
+        paletteId: config.paletteId || room.finishes.paletteId,
+        styleId: config.preferredStyleId || room.finishes.styleId,
+      },
+    };
+  });
+
+  const updated: HomeProject = {
+    ...project,
+    rooms: updatedRooms,
+    wholeHomeStyling: {
+      ...project.wholeHomeStyling,
+      ...config,
+    },
+    updatedAt: new Date().toISOString(),
+  };
+  saveProject(updated);
+  return updated;
+}
+
+/**
  * List all saved project summaries
  */
-export function listSavedProjects(): { id: string; name: string; updatedAt: string; roomCount?: number; itemCount: number }[] {
+export function listSavedProjects(): { id: string; name: string; updatedAt: string; roomCount?: number; itemCount: number; isSample?: boolean }[] {
   try {
     const indexStr = localStorage.getItem(STORAGE_KEY_HOME_LIST);
     if (indexStr) return JSON.parse(indexStr);

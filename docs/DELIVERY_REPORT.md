@@ -216,7 +216,7 @@ dist/assets/index-C3n6hrvo.js   961.75 kB │ gzip: 253.31 kB
 - [x] Colour themes and materials synchronize across views.
 - [x] UI is responsive and accessible.
 - [x] Documentation does not promise a fixed development URL.
-- [x] Tests (**68 passed across 12 suites**) and production build (**Exit 0**) rerun and verified.
+- [x] Tests (**86 passed across 13 suites**) and production build (**Exit 0**) rerun and verified.
 
 ---
 
@@ -240,3 +240,70 @@ Implemented in [`src/utils/aiVision.ts`](file:///c:/Users/devde/Downloads/first/
 - Ollama service is active and responsive at `http://localhost:11434`.
 - The local model cache on this development system currently has no downloaded models (`ollama list` returns 0 entries).
 - **Verification Status**: Code paths, API serialization, error handling, cancellation, timeout, dual parsing, and spatial integration are verified by automated tests (`src/tests/gemmaVision.test.ts`, 8 tests passed). Live end-to-end inference against local weights requires executing `ollama run paligemma:3b` in the terminal to download the model weights. No mock is ever misrepresented as live inference.
+
+---
+
+## 11. Intelligent Room Image Validation, Existing Furniture Review & Personalized Interior Design
+
+### 11.1 Two-Stage Image Validation Architecture
+Implemented in [`src/utils/imageValidation.ts`](file:///c:/Users/devde/Downloads/first/src/utils/imageValidation.ts):
+- **Stage A: Local File Validation**:
+  - Validates file format (JPEG, PNG, WebP, AVIF, GIF, BMP).
+  - Enforces 20MB file size ceiling.
+  - Verifies decode integrity in browser canvas / DOM, catching empty (0-byte) and corrupt files.
+  - Validates dimensions (minimum $100 \times 100$ px) and checks for extreme aspect ratios ($>10:1$ or $<0.1:1$).
+- **Stage B: Semantic Suitability Classification**:
+  - Evaluates whether an image depicts an indoor living space vs. unrelated subjects.
+  - Detects non-room subjects (portraits, animals, vehicles, landscapes, food, receipts/memes) using word-bounded keyword dictionaries and client-side pixel luminance/contrast analysis.
+  - **Classification Categories**:
+    - `suitable`: Clear room photograph with visible architectural surfaces and layout context.
+    - `partially_suitable`: Room is visible, but darkness ($<38$ luminance), glare ($>235$), blur (contrast $<14$), or obstruction limits precision.
+    - `unsuitable`: Unrelated subject. Room design recommendations are strictly barred.
+    - `uncertain`: Insufficient visual evidence to classify confidently; requests a wider photo.
+
+### 11.2 Existing Furniture Review (Prioritizing Owned Pieces)
+Assesses the furniture pieces the user already owns prior to recommending purchases:
+- Evaluates spatial placement against room boundaries and circulation corridors.
+- Identifies obstructive placement near door swing clearance zones (`placementStatus: 'obstructive'`, recommendation: `move`).
+- Identifies inefficient central placements restricting walkways (`placementStatus: 'inefficient'`, recommendation: `reposition`).
+- Identifies proper wall-aligned items (`placementStatus: 'useful'`, recommendation: `keep`).
+- Prevents unnecessary replacement recommendations. Never asserts damage or poor quality from visual appearance alone.
+
+### 11.3 Personalized Recommendations Across 6 Prioritized Categories
+Recommendations are categorized with priority, action, rationale, expected benefit, effort/cost category, and required measurements:
+1. **Keep**: Highlighting useful existing furniture arrangements that should be preserved.
+2. **Rearrange**: Suggested zero-cost moves to expand circulation corridors and eliminate doorway conflicts.
+3. **Add**: Purpose-driven additions (e.g. vertical storage bookcase, study desk, task lighting) only when matching the user's specific goals.
+4. **Improve**: Ambient/task lighting layers, textiles, and grid alignment improvements.
+5. **Optional Replacement**: Reserved strictly for items with severe functional constraints, explaining how retention could work.
+6. **Avoid**: Explicit warnings against oversized furniture (e.g. sectionals $>120$ cm depth) that would congest the room footprint.
+
+### 11.4 User Design Goals Customization
+An interactive accordion allows tailoring recommendations according to:
+- **Primary Space Goal**: Balanced Planning, Improve Circulation, Maximize Storage, Cozy Aesthetic, Work/Study Zone, Open Floor Space.
+- **Preferred Style**: Warm Minimalist, Scandinavian Natural, Contemporary Indian, Japandi Serenity, Modern Luxury, Industrial Modern.
+- **Budget Level**: Zero-Cost (Rearrange Only), Low-Cost (Accents & Lighting), Moderate, Flexible.
+- **Existing Furniture Strategy**: Keep 100% Existing, Keep Existing + Targeted Additions, Open to Replacing Obsolete Pieces.
+  - *Safety constraint*: When set to "Keep 100% Existing Furniture", all purchase (`add`) recommendations are automatically excluded.
+
+### 11.5 4-Tab Summary Presentation Interface
+In [`src/components/PhotoAI/PhotoUploadModal.tsx`](file:///c:/Users/devde/Downloads/first/src/components/PhotoAI/PhotoUploadModal.tsx):
+- **Tab 1: Room Summary**: Type, apparent style, lighting, architectural features, and congestion status.
+- **Tab 2: Existing Furniture Review**: Detailed breakdown of each owned item, placement status, and keep/move recommendations.
+- **Tab 3: Top Recommendations**: Actionable items with priority badges, effort/cost tags, and direct "Apply Proposed Move / Add" actions.
+- **Tab 4: Measurement Checklist**: Interactive checklist of physical tape measurements needed before purchasing.
+
+### 11.6 Integration with 2D/3D Planner & Deterministic SAT Fit Engine
+- Adding recommended or detected items tags them as provisional estimates (`provenance: 'ai-suggestion'`, `isConfirmed: false`).
+- Applying rearrangements updates the room layout via `onUpdateFurniture` with user approval.
+- All proposed furniture positions are validated through `checkInsideRoomBounds` and SAT collision checks (`doPolygonsIntersect`).
+
+---
+
+## 12. Verification & Test Suite Summary
+
+- **Vitest Suites**: 13 passed (13 total).
+- **Automated Tests**: 86 passed (86 total).
+- **TypeScript & Build**: Passed with exit code 0 (`tsc -b && vite build`).
+- **ESLint**: Passed with 0 errors.
+- **Automated Test File Added**: [`src/tests/imageValidationAndReview.test.ts`](file:///c:/Users/devde/Downloads/first/src/tests/imageValidationAndReview.test.ts) (18 tests covering file validation, semantic suitability, unsuitable suppression, existing furniture review, personalized goals, and geometry constraints).

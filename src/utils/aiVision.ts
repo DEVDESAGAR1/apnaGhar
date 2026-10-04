@@ -1,4 +1,18 @@
-import type { PhotoDetectionSuggestion, RoomModel, AiProviderType, FurnitureItem } from '../types/model';
+import type { 
+  PhotoDetectionSuggestion, 
+  RoomModel, 
+  AiProviderType, 
+  FurnitureItem,
+  ImageValidationResult,
+  DetailedRoomAnalysis,
+  ExistingFurnitureReviewItem,
+  PersonalizedRecommendation,
+  UserDesignGoal
+} from '../types/model';
+import { 
+  evaluateSemanticSuitability, 
+  inspectImagePixels 
+} from './imageValidation';
 
 /**
  * AI & Vision Service for ApnaGhar (अपना घर)
@@ -6,7 +20,7 @@ import type { PhotoDetectionSuggestion, RoomModel, AiProviderType, FurnitureItem
  * Privacy & Architectural Principles:
  * 1. Zero external network calls without explicit user consent.
  * 2. On-device local analysis by default (100% offline & private).
- * 3. Genuine local open-source vision support via Ollama (e.g. LLaVA or Llama 3.2 Vision).
+ * 3. Genuine local open-source vision support via Ollama (e.g. PaliGemma, LLaVA, Llama 3.2 Vision).
  * 4. Photo-derived measurements are tagged as estimates ('photo-estimate' / 'ai-suggestion'), NEVER ground truth.
  * 5. NO silent cloud fallback: If a local model fails, inform the user with actionable diagnostics.
  * 6. Deterministic spatial fit and collision calculations remain strictly authoritative.
@@ -20,6 +34,8 @@ export interface AnalysisOptions {
   ollamaBaseUrl?: string;
   ollamaModel?: string;
   gemmaModel?: string;
+  userGoal?: UserDesignGoal;
+  fileName?: string;
 }
 
 export interface AnalysisResult {
@@ -27,6 +43,8 @@ export interface AnalysisResult {
   suggestions: PhotoDetectionSuggestion[];
   disclaimer: string;
   modelLicense: string;
+  validation?: ImageValidationResult;
+  detailedAnalysis?: DetailedRoomAnalysis;
   providerDetails?: {
     modelName?: string;
     inferenceType: 'local' | 'cloud';
@@ -69,13 +87,13 @@ export const AI_PROVIDERS: ProviderCapability[] = [
   },
   {
     id: 'local-gemma',
-    name: 'Google Gemma Vision (PaliGemma)',
-    badge: 'GEMMA VISION • ON-DEVICE',
-    description: 'Runs Google\'s open PaliGemma / PaliGemma 2 multimodal vision model locally via Ollama. 100% private on-device visual spatial reasoning.',
+    name: 'Google Gemma 3 Vision (gemma3:4b)',
+    badge: 'GEMMA 3 • ON-DEVICE VISION',
+    description: 'Runs Google Gemma 3 (gemma3:4b) multimodal vision model locally via Ollama. 100% private on-device visual spatial reasoning.',
     privacyLevel: 'maximum-local',
     offlineCapable: true,
     requiresApiKey: false,
-    modelLicense: 'Gemma Terms of Use / PaliGemma Additional Terms of Use (Google)',
+    modelLicense: 'Gemma Terms of Use (Google Open Model)',
   },
   {
     id: 'local-ollama',
@@ -164,6 +182,274 @@ export async function checkOllamaConnection(
 }
 
 /**
+ * Builds a comprehensive, validated DetailedRoomAnalysis report incorporating:
+ * 1. Image check status (suitable, partially_suitable, unsuitable, uncertain)
+ * 2. Room summary & characteristics
+ * 3. Existing furniture review (assessing current pieces to keep, move, reposition, replace)
+ * 4. Top personalized recommendations (Keep, Rearrange, Add, Improve, Avoid) tailored to user goals
+ * 5. Suggested additions with practical purposes
+ * 6. Physical measurement checklist
+ */
+export function buildDetailedAnalysis(params: {
+  validation: ImageValidationResult;
+  suggestions: PhotoDetectionSuggestion[];
+  room: RoomModel;
+  userGoal?: UserDesignGoal;
+  customCharacteristics?: Partial<DetailedRoomAnalysis['roomCharacteristics']>;
+  customReviews?: ExistingFurnitureReviewItem[];
+  customRecommendations?: PersonalizedRecommendation[];
+  customChecklist?: string[];
+}): DetailedRoomAnalysis {
+  const { validation, suggestions, room, userGoal } = params;
+
+  // If the image is unsuitable, strictly suppress room characteristics and recommendations
+  if (validation.suitability === 'unsuitable') {
+    return {
+      validation,
+      detectedItems: [],
+      existingFurnitureReview: [],
+      recommendations: [],
+      measurementChecklist: [],
+      userGoal,
+    };
+  }
+
+  const roomType = params.customCharacteristics?.roomType || room.type || 'living';
+  const goal = userGoal?.primaryGoal || 'general';
+  const budget = userGoal?.budget || 'moderate';
+  const strategy = userGoal?.furnitureStrategy || 'open-to-few-additions';
+
+  // 1. Room Characteristics
+  const roomCharacteristics = {
+    roomType: roomType.charAt(0).toUpperCase() + roomType.slice(1),
+    functionalZones: params.customCharacteristics?.functionalZones || [
+      'Primary seating and social interaction zone',
+      'Central circulation corridor connecting entrances',
+      'Perimeter display and auxiliary storage wall',
+    ],
+    architecturalFeatures: params.customCharacteristics?.architecturalFeatures || [
+      `Enclosed rectangular perimeter (${room.width} cm × ${room.length} cm)`,
+      `${(room.openings || []).filter(o => o.type === 'door').length} architectural doorway(s) with clearance arcs`,
+      `${(room.openings || []).filter(o => o.type === 'window').length} natural window opening(s)`,
+    ],
+    dominantColours: params.customCharacteristics?.dominantColours || [
+      'Warm Alabaster (#F5F2EB)',
+      'Natural Muted Oak (#C49A6C)',
+      'Slate Gray Accents (#2B2D42)',
+    ],
+    materials: params.customCharacteristics?.materials || [
+      'Smooth plaster walls with matte emulsion',
+      'Hardwood oak floor planks with natural grain',
+      'Textured woven fabric upholstery',
+    ],
+    apparentStyle: userGoal?.preferredStyle || params.customCharacteristics?.apparentStyle || 'Contemporary Warm Minimalist',
+    lighting: params.customCharacteristics?.lighting || (
+      validation.qualityIssues.includes('darkness')
+        ? 'Subdued ambient light; recommended to add secondary task lighting.'
+        : 'Balanced daytime illumination with distinct wall shadows.'
+    ),
+    congestion: (params.customCharacteristics?.congestion || (
+      (room.furniture || []).length > 4 ? 'congested' : ((room.furniture || []).length > 2 ? 'moderate' : 'spacious')
+    )) as 'spacious' | 'moderate' | 'congested',
+    limitations: params.customCharacteristics?.limitations || [
+      'Single-camera viewpoint leaves behind-camera perimeter unobserved.',
+      'Perspective angles may compress depth; verify with physical tape measurements.',
+    ],
+  };
+
+  // 2. Existing Furniture Review (Section 3: Review furniture user already owns)
+  const existingItems = room.furniture && room.furniture.length > 0 ? room.furniture : [];
+  const existingFurnitureReview: ExistingFurnitureReviewItem[] = [];
+
+  if (params.customReviews && params.customReviews.length > 0) {
+    existingFurnitureReview.push(...params.customReviews);
+  } else if (existingItems.length > 0) {
+    for (const item of existingItems) {
+      const nearDoor = (room.openings || []).some(op => {
+        if (op.type !== 'door') return false;
+        return Math.hypot(item.x - op.offset, item.y - (op.wall === 'north' ? 0 : room.length)) < 120;
+      });
+
+      const nearCenter = Math.abs(item.x - room.width / 2) < 40 && Math.abs(item.y - room.length / 2) < 40;
+
+      let placementStatus: ExistingFurnitureReviewItem['placementStatus'] = 'useful';
+      let recommendation: ExistingFurnitureReviewItem['recommendation'] = 'keep';
+      let reason = 'Good alignment against room boundary with sufficient clearance.';
+      let additionalInfoNeeded = 'Confirm physical spacing to nearest wall with tape measure.';
+
+      if (nearDoor) {
+        placementStatus = 'obstructive';
+        recommendation = 'move';
+        reason = 'Currently encroaches on door swing clearance zone. Moving 30 cm away will ensure unhindered entry.';
+        additionalInfoNeeded = 'Measure door opening sweep radius.';
+      } else if (nearCenter && item.category !== 'table') {
+        placementStatus = 'inefficient';
+        recommendation = 'reposition';
+        reason = 'Positioned near the center of the room, restricting open walking paths.';
+        additionalInfoNeeded = 'Verify walking corridor width (minimum 80 cm recommended).';
+      }
+
+      existingFurnitureReview.push({
+        id: `review-${item.id}`,
+        name: item.name,
+        apparentRole: `Primary ${item.category} piece supporting room function.`,
+        placementStatus,
+        recommendation,
+        reason,
+        additionalInfoNeeded,
+      });
+    }
+  } else {
+    // Review detected items from photo
+    for (const sug of suggestions.slice(0, 3)) {
+      existingFurnitureReview.push({
+        id: `review-${sug.id}`,
+        name: sug.label,
+        apparentRole: `Visible ${sug.category} observed in room photograph.`,
+        placementStatus: 'useful',
+        recommendation: 'keep',
+        reason: 'Appears functionally appropriate for this room type. Recommend retaining in current zone.',
+        additionalInfoNeeded: `Measure confirmed width and depth (estimated: ${sug.estimatedWidth}×${sug.estimatedDepth} cm).`,
+        estimatedItem: sug,
+      });
+    }
+  }
+
+  // 3. Personalized Recommendations (Section 4: Prioritized, concise categories)
+  const recommendations: PersonalizedRecommendation[] = [];
+
+  if (params.customRecommendations && params.customRecommendations.length > 0) {
+    recommendations.push(...params.customRecommendations);
+  } else {
+    // A. Keep
+    recommendations.push({
+      id: `rec-keep-${Date.now()}-1`,
+      category: 'keep',
+      priority: 'high',
+      action: 'Preserve primary perimeter seating orientation',
+      reason: 'Anchors the room comfortably while leaving central floor space open for movement.',
+      expectedBenefit: 'Maintains spacious feel without costly reconfigurations.',
+      effortCost: 'free',
+      requiredMeasurements: 'Confirm at least 60 cm walking clearance from coffee table or TV wall.',
+      status: 'ready',
+    });
+
+    // B. Rearrange
+    if (goal === 'improve-circulation' || existingFurnitureReview.some(r => r.recommendation === 'move')) {
+      recommendations.push({
+        id: `rec-rearr-${Date.now()}-2`,
+        category: 'rearrange',
+        priority: 'high',
+        action: 'Shift seating away from entrance clearance arc',
+        reason: 'Doorway swing requires an unimpeded 90-degree arc for safe egress and furniture entry.',
+        expectedBenefit: 'Eliminates door collision and expands apparent entrance width.',
+        effortCost: 'free',
+        requiredMeasurements: 'Door swing radius (typically 80–90 cm).',
+        status: 'ready',
+      });
+    } else {
+      recommendations.push({
+        id: `rec-rearr-${Date.now()}-2`,
+        category: 'rearrange',
+        priority: 'medium',
+        action: 'Align secondary furniture to established 10 cm grid spacing',
+        reason: 'Consistent setbacks from walls reduce visual clutter and simplify cleaning access.',
+        expectedBenefit: 'Improves spatial rhythm and visual balance.',
+        effortCost: 'free',
+        requiredMeasurements: 'Wall offset distance.',
+        status: 'ready',
+      });
+    }
+
+    // C. Add
+    if (strategy !== 'keep-all-existing') {
+      if (goal === 'maximize-storage') {
+        recommendations.push({
+          id: `rec-add-${Date.now()}-3`,
+          category: 'add',
+          priority: 'high',
+          action: 'Introduce a slender vertical storage bookcase (35–40 cm depth)',
+          reason: 'Maximizes vertical storage capacity without encroaching on prime floor area.',
+          expectedBenefit: 'Adds organized storage while conserving walkway floor area.',
+          effortCost: budget === 'zero-cost' ? 'free' : 'purchase-required',
+          requiredMeasurements: 'Available North/East wall length and vertical ceiling clearance.',
+          status: 'needs-info',
+        });
+      } else if (goal === 'work-study-zone') {
+        recommendations.push({
+          id: `rec-add-${Date.now()}-3`,
+          category: 'add',
+          priority: 'high',
+          action: 'Add a compact ergonomic study desk (100×55 cm)',
+          reason: 'Creates a designated focus work zone with power access near wall perimeter.',
+          expectedBenefit: 'Provides dedicated task productivity without cluttering dining or living surfaces.',
+          effortCost: budget === 'zero-cost' ? 'free' : 'purchase-required',
+          requiredMeasurements: 'Wall segment width and proximity to electrical outlets.',
+          status: 'needs-info',
+        });
+      } else {
+        recommendations.push({
+          id: `rec-add-${Date.now()}-3`,
+          category: 'add',
+          priority: 'medium',
+          action: 'Position an accent side table beside the primary sofa',
+          reason: 'Provides a convenient surface for resting drinks, reading glasses, or a task lamp.',
+          expectedBenefit: 'Enhances everyday comfort without restricting walking paths.',
+          effortCost: 'low-cost',
+          requiredMeasurements: 'Sofa armrest height (for level alignment).',
+          status: 'ready',
+        });
+      }
+    }
+
+    // D. Improve
+    recommendations.push({
+      id: `rec-imp-${Date.now()}-4`,
+      category: 'improve',
+      priority: 'medium',
+      action: 'Layer warm secondary lighting (2700K floor or table lamp)',
+      reason: 'Single overhead fixtures create harsh glare and dark corners; layered light softens room depth.',
+      expectedBenefit: 'Creates inviting evening ambiance and highlights architectural textures.',
+      effortCost: 'low-cost',
+      requiredMeasurements: 'Wall socket distance and cord run.',
+      status: 'ready',
+    });
+
+    // F. Avoid
+    recommendations.push({
+      id: `rec-avd-${Date.now()}-5`,
+      category: 'avoid',
+      priority: 'high',
+      action: 'Avoid oversized L-shaped sectionals or wide coffee tables exceeding 120 cm width',
+      reason: 'In this room footprint, oversized pieces congest the primary circulation pathway and block door arcs.',
+      expectedBenefit: 'Prevents expensive purchasing mistakes that restrict movement.',
+      effortCost: 'free',
+      requiredMeasurements: 'Maintain minimum 80 cm walking corridor between opposing furniture.',
+      status: 'ready',
+    });
+  }
+
+  // 4. Measurement Checklist
+  const measurementChecklist = params.customChecklist || [
+    `Room overall width (${room.width} cm) and length (${room.length} cm) measured at baseboard level`,
+    'Clear doorway opening width and 90-degree swing arc radius',
+    'Window sill height from floor and distance to adjacent corner',
+    'Floor clearance between primary seating and opposing coffee table / TV wall (minimum 45 cm recommended)',
+    'Location and height of wall electrical outlets and switches',
+  ];
+
+  return {
+    validation,
+    roomCharacteristics,
+    detectedItems: suggestions,
+    existingFurnitureReview,
+    recommendations,
+    measurementChecklist,
+    userGoal,
+  };
+}
+
+/**
  * Main room photo analysis entry point: routes to the explicitly chosen provider
  */
 export async function analyzeRoomPhoto(
@@ -176,46 +462,112 @@ export async function analyzeRoomPhoto(
     consentExternalAi = false, 
     apiKey,
     ollamaBaseUrl = 'http://localhost:11434',
-    ollamaModel = 'llama3.2-vision'
+    ollamaModel = 'llama3.2-vision',
+    gemmaModel = 'gemma3:4b',
+    userGoal,
+    fileName,
   } = options;
 
   const startTime = Date.now();
 
-  // 1. Local Google Gemma Vision (PaliGemma) Provider
+  // Stage B Pre-screening: Inspect pixels for brightness, contrast, and darkness/glare/blur
+  const pixelStats = await inspectImagePixels(imageDataUrl);
+
+  // Evaluate initial semantic suitability (e.g. filename checks or obvious non-room subjects)
+  const initialSuitability = evaluateSemanticSuitability({
+    fileName,
+    qualityIssues: pixelStats.qualityIssues,
+  });
+
+  // If the image is determined to be clearly unsuitable upfront (e.g. portrait, pet, vehicle, landscape):
+  if (initialSuitability.suitability === 'unsuitable') {
+    const detailedAnalysis = buildDetailedAnalysis({
+      validation: initialSuitability,
+      suggestions: [],
+      room,
+      userGoal,
+    });
+
+    const providerSource = provider === 'local-gemma' 
+      ? 'local-gemma' 
+      : (provider === 'local-ollama' ? 'local-ollama' : (provider === 'cloud-gemini' ? 'gemini-vision-api' : 'local-heuristic-engine'));
+
+    return {
+      source: providerSource,
+      suggestions: [],
+      validation: initialSuitability,
+      detailedAnalysis,
+      disclaimer: initialSuitability.explanation,
+      modelLicense: 'ApnaGhar Image Validation (Stage B Screening)',
+      providerDetails: {
+        modelName: provider === 'local-gemma' ? gemmaModel : (provider === 'local-ollama' ? ollamaModel : 'heuristic-screening'),
+        inferenceType: provider === 'cloud-gemini' ? 'cloud' : 'local',
+        latencyMs: Date.now() - startTime,
+      },
+    };
+  }
+
+  let suggestions: PhotoDetectionSuggestion[] = [];
+  let source: AnalysisResult['source'] = 'local-heuristic-engine';
+  let disclaimer = '';
+  let modelLicense = '';
+  let modelName = '';
+  let inferenceType: 'local' | 'cloud' = 'local';
+
+  // 1. Local Google Gemma Vision (Gemma 3 / PaliGemma) Provider
   if (provider === 'local-gemma') {
-    const targetModel = options.gemmaModel || 'paligemma:3b';
-    const suggestions = await callGemmaVision(imageDataUrl, room, ollamaBaseUrl, targetModel);
-    return {
-      source: 'local-gemma',
-      suggestions,
-      disclaimer: `Generated locally on-device using Google PaliGemma (${targetModel}). All dimensions are provisional visual estimates and must be verified before purchasing or ordering furniture.`,
-      modelLicense: `Gemma Terms of Use / PaliGemma Additional Terms of Use (Google Open Model)`,
-      providerDetails: {
-        modelName: targetModel,
-        inferenceType: 'local',
-        latencyMs: Date.now() - startTime,
-      },
-    };
-  }
+    const targetModel = gemmaModel || 'gemma3:4b';
+    const visionDetails = await callGemmaVisionDetails(imageDataUrl, room, ollamaBaseUrl, targetModel);
+    suggestions = visionDetails.suggestions;
+    source = 'local-gemma';
+    const isPali = targetModel.toLowerCase().includes('paligemma');
+    disclaimer = `Generated locally on-device using Google ${isPali ? 'PaliGemma' : 'Gemma'} (${targetModel}). All dimensions are provisional visual estimates and must be verified before purchasing or ordering furniture.`;
+    modelLicense = `Gemma Terms of Use (Google Open Model)`;
+    modelName = targetModel;
+    inferenceType = 'local';
 
+    if (visionDetails.suitability === 'unsuitable' || !visionDetails.isIndoorRoom) {
+      const unsuitableValidation = evaluateSemanticSuitability({
+        fileName,
+        explicitClassification: 'unsuitable',
+        isIndoor: false,
+        qualityIssues: visionDetails.qualityIssues,
+        rawText: visionDetails.explanation,
+      });
+
+      const detailedAnalysis = buildDetailedAnalysis({
+        validation: unsuitableValidation,
+        suggestions: [],
+        room,
+        userGoal,
+      });
+
+      return {
+        source,
+        suggestions: [],
+        validation: unsuitableValidation,
+        detailedAnalysis,
+        disclaimer: visionDetails.explanation || 'This image appears to show an unrelated subject rather than an indoor room.',
+        modelLicense,
+        providerDetails: {
+          modelName,
+          inferenceType,
+          latencyMs: Date.now() - startTime,
+        },
+      };
+    }
+  } 
   // 2. Local Ollama Provider (LLaVA / Llama 3.2 Vision)
-  if (provider === 'local-ollama') {
-    const suggestions = await callOllamaVision(imageDataUrl, room, ollamaBaseUrl, ollamaModel);
-    return {
-      source: 'local-ollama',
-      suggestions,
-      disclaimer: `Generated locally using Ollama (${ollamaModel}). All dimensions are provisional visual estimates and must be verified before purchasing or ordering furniture.`,
-      modelLicense: `Open-source local inference via Ollama (${ollamaModel})`,
-      providerDetails: {
-        modelName: ollamaModel,
-        inferenceType: 'local',
-        latencyMs: Date.now() - startTime,
-      },
-    };
-  }
-
+  else if (provider === 'local-ollama') {
+    suggestions = await callOllamaVision(imageDataUrl, room, ollamaBaseUrl, ollamaModel);
+    source = 'local-ollama';
+    disclaimer = `Generated locally using Ollama (${ollamaModel}). All dimensions are provisional visual estimates and must be verified before purchasing or ordering furniture.`;
+    modelLicense = `Open-source local inference via Ollama (${ollamaModel})`;
+    modelName = ollamaModel;
+    inferenceType = 'local';
+  } 
   // 3. Cloud Google Gemini Provider
-  if (provider === 'cloud-gemini' || provider === 'custom-gemini-key') {
+  else if (provider === 'cloud-gemini' || provider === 'custom-gemini-key') {
     if (!consentExternalAi) {
       throw new Error('Cloud AI disabled: Explicit user consent is required before transmitting room imagery to Google Gemini.');
     }
@@ -223,54 +575,113 @@ export async function analyzeRoomPhoto(
       throw new Error('Missing Google Gemini API key. Please configure your key in Settings.');
     }
 
-    const suggestions = await callGeminiVision(imageDataUrl, apiKey, room);
-    return {
-      source: 'gemini-vision-api',
-      suggestions,
-      disclaimer: 'Estimated by Google Gemini 1.5 Flash Vision. All dimensions are approximations and must be physically measured on site.',
-      modelLicense: 'Google Gemini API Terms of Service',
-      providerDetails: {
-        modelName: 'gemini-1.5-flash',
-        inferenceType: 'cloud',
-        latencyMs: Date.now() - startTime,
-      },
-    };
+    suggestions = await callGeminiVision(imageDataUrl, apiKey, room);
+    source = 'gemini-vision-api';
+    disclaimer = 'Estimated by Google Gemini 1.5 Flash Vision. All dimensions are approximations and must be physically measured on site.';
+    modelLicense = 'Google Gemini API Terms of Service';
+    modelName = 'gemini-1.5-flash';
+    inferenceType = 'cloud';
+  } 
+  // 4. Default: Local On-Device Heuristic Engine (100% Private & Instantaneous)
+  else {
+    suggestions = analyzePhotoLocally(imageDataUrl, room);
+    source = 'local-heuristic-engine';
+    disclaimer = 'Generated by ApnaGhar on-device spatial heuristic engine (100% private, no image data left your device). All dimensions are estimates.';
+    modelLicense = 'ApnaGhar Built-in Spatial Engine (MIT License)';
+    modelName = 'ApnaGhar Rule-Based Heuristic v2';
+    inferenceType = 'local';
   }
 
-  // 4. Default: Local On-Device Heuristic Engine (100% Private & Instantaneous)
-  const localSuggestions = analyzePhotoLocally(imageDataUrl, room);
+  // Final Stage B semantic suitability synthesis
+  // NOTE: Rule-based heuristic suggestions must not be used to bypass semantic room validation!
+  const detectedLabels = (provider === 'local-heuristic') 
+    ? [] 
+    : suggestions.map(s => s.label);
+
+  const finalValidation = evaluateSemanticSuitability({
+    fileName,
+    detectedLabels,
+    qualityIssues: pixelStats.qualityIssues,
+    roomType: room.type,
+    isIndoor: suggestions.length > 0 && provider !== 'local-heuristic',
+  });
+
+  // If final validation determined the image is unsuitable, strictly suppress suggestions
+  if (finalValidation.suitability === 'unsuitable') {
+    suggestions = [];
+  }
+
+  const detailedAnalysis = buildDetailedAnalysis({
+    validation: finalValidation,
+    suggestions,
+    room,
+    userGoal,
+  });
+
   return {
-    source: 'local-heuristic-engine',
-    suggestions: localSuggestions,
-    disclaimer: 'Generated by ApnaGhar on-device spatial heuristic engine (100% private, no image data left your device). All dimensions are estimates.',
-    modelLicense: 'ApnaGhar Built-in Spatial Engine (MIT License)',
+    source,
+    suggestions,
+    validation: finalValidation,
+    detailedAnalysis,
+    disclaimer,
+    modelLicense,
     providerDetails: {
-      modelName: 'ApnaGhar Rule-Based Heuristic v2',
-      inferenceType: 'local',
+      modelName,
+      inferenceType,
       latencyMs: Date.now() - startTime,
     },
   };
 }
 
 /**
- * Tests connection to a local or networked Gemma Vision (PaliGemma) instance
+ * Automatically discovers installed models in Ollama via /api/tags
+ */
+export async function discoverOllamaModels(baseUrl: string = 'http://localhost:11434'): Promise<string[]> {
+  try {
+    const cleanUrl = baseUrl.replace(/\/+$/, '');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(`${cleanUrl}/api/tags`, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (Array.isArray(data.models)) {
+      return data.models.map((m: any) => m.name || m.model || '').filter(Boolean);
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Tests connection to a local or networked Gemma Vision instance (gemma3:4b / paligemma:3b)
  */
 export async function checkGemmaConnection(
   baseUrl: string = 'http://localhost:11434',
-  targetModel: string = 'paligemma:3b'
+  targetModel: string = 'gemma3:4b'
 ): Promise<OllamaConnectionStatus> {
   return checkOllamaConnection(baseUrl, targetModel);
 }
 
+export interface VisionInferenceDetails {
+  suggestions: PhotoDetectionSuggestion[];
+  suitability: ImageSuitability;
+  isIndoorRoom: boolean;
+  subjectType: string;
+  explanation?: string;
+  qualityIssues: string[];
+}
+
 /**
- * Calls local Google Gemma Vision (PaliGemma) endpoint with robust structured parsing
+ * Calls local Google Gemma Vision (gemma3:4b / paligemma:3b) endpoint with full suitability metadata
  */
-export async function callGemmaVision(
+export async function callGemmaVisionDetails(
   imageDataUrl: string,
   room: RoomModel,
   baseUrl: string = 'http://localhost:11434',
-  model: string = 'paligemma:3b'
-): Promise<PhotoDetectionSuggestion[]> {
+  model: string = 'gemma3:4b'
+): Promise<VisionInferenceDetails> {
   const cleanUrl = baseUrl.replace(/\/+$/, '');
 
   // Extract raw base64 data without data:image/... prefix
@@ -280,7 +691,9 @@ export async function callGemmaVision(
   }
   const base64Data = match[2];
 
-  const prompt = `You are a spatial interior planning assistant using Google PaliGemma vision.
+  const isPaliGemma = model.toLowerCase().includes('paligemma');
+  const prompt = isPaliGemma
+    ? `You are a spatial interior planning assistant using Google PaliGemma vision.
 Analyze this room photograph for furniture layout.
 Physical room boundaries: width = ${room.width} cm, length = ${room.length} cm.
 Identify recognizable furniture and fixtures (sofa, armchair, dining_table, coffee_table, chair, desk, bed, tv_unit, bookcase, plant, floor_lamp).
@@ -302,7 +715,38 @@ Output a valid JSON array matching:
     "box2D": {"x": 0.15, "y": 0.35, "width": 0.45, "height": 0.35},
     "notes": "Main seating against wall"
   }
-]`;
+]`
+    : `You are an architectural vision and interior planning assistant for ApnaGhar (अपना घर).
+Analyze this image:
+1. Determine if this image is a genuine indoor room photograph (living room, bedroom, dining room, kitchen, office) or an unrelated subject (such as a selfie or portrait of a person, animal, vehicle, landscape, food, document, meme).
+2. If it is an unrelated subject or a personal selfie/portrait, set is_indoor_room to false, suitability to "unsuitable", provide a clear explanation, and keep suggestions empty [].
+3. Only if it is a genuine indoor room, identify visible furniture within physical room boundaries: width = ${room.width} cm, length = ${room.length} cm.
+
+Respond ONLY with a valid JSON object matching this schema:
+{
+  "is_indoor_room": boolean,
+  "subject_type": "room" | "selfie" | "portrait" | "animal" | "vehicle" | "landscape" | "food" | "other",
+  "suitability": "suitable" | "partially_suitable" | "unsuitable" | "uncertain",
+  "explanation": "concise description of what is visible",
+  "quality_issues": string[],
+  "suggestions": [
+    {
+      "label": "Item Name",
+      "category": "seating" | "table" | "bed" | "storage" | "desk" | "lighting" | "decor",
+      "estimatedWidth": number,
+      "estimatedDepth": number,
+      "estimatedHeight": number,
+      "suggestedX": number,
+      "suggestedY": number,
+      "rotation": 0,
+      "confidence": 0.85,
+      "color": "#3d5a80",
+      "modelType": "sofa_3seater",
+      "box2D": {"x": 0.2, "y": 0.3, "width": 0.4, "height": 0.3},
+      "notes": "Placement rationale"
+    }
+  ]
+}`;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s timeout
@@ -337,7 +781,7 @@ Output a valid JSON array matching:
   } catch (err: any) {
     clearTimeout(timeoutId);
     if (err.name === 'AbortError') {
-      throw new Error(`Gemma Vision inference timed out after 45 seconds on model '${model}'. Try 'paligemma:3b' for faster CPU/GPU processing.`);
+      throw new Error(`Gemma Vision inference timed out after 45 seconds on model '${model}'. Try 'gemma3:4b' for faster CPU/GPU processing.`);
     }
     if (err instanceof TypeError && err.message.includes('fetch')) {
       throw new Error(`Could not connect to Ollama at ${cleanUrl}. Ensure Ollama is running ('ollama serve') and CORS allows browser requests (set OLLAMA_ORIGINS=*).`);
@@ -345,7 +789,112 @@ Output a valid JSON array matching:
     throw err;
   }
 
-  return parseAndValidateGemmaVisionResponse(responseText, room, model);
+  return parseGemmaVisionDetails(responseText, room, model);
+}
+
+/**
+ * Backward-compatible helper returning PhotoDetectionSuggestion[] directly
+ */
+export async function callGemmaVision(
+  imageDataUrl: string,
+  room: RoomModel,
+  baseUrl: string = 'http://localhost:11434',
+  model: string = 'gemma3:4b'
+): Promise<PhotoDetectionSuggestion[]> {
+  const details = await callGemmaVisionDetails(imageDataUrl, room, baseUrl, model);
+  return details.suggestions;
+}
+
+/**
+ * Parses raw text from Gemma / PaliGemma into full VisionInferenceDetails
+ */
+export function parseGemmaVisionDetails(
+  rawText: string,
+  room: RoomModel,
+  modelTag: string
+): VisionInferenceDetails {
+  let cleaned = rawText.trim();
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+  }
+
+  // Check for PaliGemma specialized location tokens
+  const locRegex = /<loc(\d+)><loc(\d+)><loc(\d+)><loc(\d+)>\s*([a-zA-Z_\s]+)/g;
+  if (locRegex.test(cleaned)) {
+    const suggestions = parseAndValidateGemmaVisionResponse(cleaned, room, modelTag);
+    return {
+      suggestions,
+      suitability: 'suitable',
+      isIndoorRoom: true,
+      subjectType: 'room',
+      explanation: 'Detected room layout via Google PaliGemma location tokens.',
+      qualityIssues: [],
+    };
+  }
+
+  // Parse JSON
+  let parsed: any;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    const arrayMatch = cleaned.match(/\[\s*\{[\s\S]*\}\s*\]/);
+    if (arrayMatch) {
+      try {
+        parsed = JSON.parse(arrayMatch[0]);
+      } catch {
+        // Fallback
+      }
+    } else {
+      const objMatch = cleaned.match(/\{[\s\S]*\}/);
+      if (objMatch) {
+        try {
+          parsed = JSON.parse(objMatch[0]);
+        } catch {
+          // Fallback
+        }
+      }
+    }
+  }
+
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    const isIndoor = parsed.is_indoor_room !== false;
+    const subject = parsed.subject_type || (isIndoor ? 'room' : 'other');
+    const suitability: ImageSuitability = parsed.suitability || (isIndoor ? 'suitable' : 'unsuitable');
+    const explanation = parsed.explanation || (isIndoor ? 'Valid room photo' : 'Unrelated subject detected');
+    const qualityIssues = Array.isArray(parsed.quality_issues) ? parsed.quality_issues : [];
+
+    if (!isIndoor || suitability === 'unsuitable') {
+      return {
+        suggestions: [],
+        suitability: 'unsuitable',
+        isIndoorRoom: false,
+        subjectType: subject,
+        explanation,
+        qualityIssues,
+      };
+    }
+
+    const suggestions = parseAndValidateSuggestions(cleaned, room, modelTag);
+    return {
+      suggestions,
+      suitability,
+      isIndoorRoom: true,
+      subjectType: subject,
+      explanation,
+      qualityIssues,
+    };
+  }
+
+  // If array format:
+  const suggestions = parseAndValidateGemmaVisionResponse(cleaned, room, modelTag);
+  return {
+    suggestions,
+    suitability: 'suitable',
+    isIndoorRoom: true,
+    subjectType: 'room',
+    explanation: 'Detected items using Google Gemma.',
+    qualityIssues: [],
+  };
 }
 
 /**
@@ -587,12 +1136,34 @@ export function parseAndValidateSuggestions(
     }
   }
 
-  // If parsed object has a suggestions property, unwrap it
+  // If parsed object has a validation object indicating unsuitable image, return empty suggestions
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    if (
+      parsed.validation?.suitability === 'unsuitable' || 
+      parsed.suitability === 'unsuitable' || 
+      parsed.is_indoor_room === false ||
+      parsed.subject_type === 'selfie' ||
+      parsed.subject_type === 'portrait'
+    ) {
+      return [];
+    }
+  }
+
+  // If parsed object has a suggestions or detectedItems property, unwrap it
   const items = Array.isArray(parsed) 
     ? parsed 
-    : (Array.isArray(parsed?.suggestions) ? parsed.suggestions : []);
+    : (Array.isArray(parsed?.suggestions) ? parsed.suggestions : (Array.isArray(parsed?.detectedItems) ? parsed.detectedItems : []));
 
   if (items.length === 0) {
+    if (
+      parsed?.validation?.suitability === 'unsuitable' || 
+      parsed?.suitability === 'unsuitable' || 
+      parsed?.is_indoor_room === false ||
+      parsed?.subject_type === 'selfie' ||
+      parsed?.subject_type === 'portrait'
+    ) {
+      return [];
+    }
     throw new Error(`Model '${modelTag}' was unable to identify specific furniture items in the provided photo.`);
   }
 

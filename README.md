@@ -62,6 +62,22 @@ Built with a **local-first, privacy-by-default** philosophy:
 - **Provenance Tracking**: Every dimension records its source (`manual`, `catalog`, `photo-estimate`, `ai-suggestion`) and confirmation state.
 - **Safe Export & Purge**: Photos are excluded from JSON exports by default, and can be permanently purged with one click.
 
+### 7. Intelligent Room Image Validation & Existing Furniture Review
+- **Two-Stage Image Validation**:
+  - *Stage A (Local File Validation)*: File format, decoding integrity, 20MB limit, and minimum dimension checks ($100\times100$ px).
+  - *Stage B (Semantic Suitability)*: Automatically screens images into `suitable`, `partially_suitable`, `unsuitable`, or `uncertain`.
+  - *Unsuitable Suppression*: Prevents room design recommendations for unrelated images (portraits, pets, vehicles, landscapes, food, memes) with a clear explanation and "Upload another image" prompt.
+  - *Partially Suitable Warnings*: Dark, blurry, or cropped room photos provide explicit quality warnings while letting users continue with provisional recommendations.
+- **Existing Furniture Review (Retain & Reposition Before Buying)**:
+  - First assesses user's existing furniture before proposing purchases.
+  - Identifies obstructive items near door clearance swings and inefficient central placements.
+  - Generates clear keep/move/reposition recommendations with required tape measurements.
+- **Personalized Recommendations Across 6 Prioritized Categories**:
+  - *Keep*, *Rearrange*, *Add*, *Improve*, *Optional Replacement*, and *Avoid*.
+  - User Design Goals customization: Primary space goal, preferred style, budget tier, and existing furniture strategy.
+- **4-Tab Summary Presentation Interface**:
+  - Room Summary, Existing Furniture Review, Top Recommendations, and Physical Measurement Checklist.
+
 ---
 
 ## 🚀 Quick Start & Setup
@@ -75,7 +91,7 @@ Built with a **local-first, privacy-by-default** philosophy:
 # 1. Clone repository and install dependencies
 npm install
 
-# 2. Run automated test suite (68 tests across 12 suites)
+# 2. Run automated test suite (86 tests across 13 suites)
 npm test
 
 # 3. Start local development server

@@ -487,10 +487,32 @@ export const ThreeViewer: React.FC<ThreeViewerProps> = ({
     // 3. Room Floor & Finishing
     const floorGeom = new THREE.PlaneGeometry(room.width, room.length);
     const floorColor = room.finishes?.floorColor ? new THREE.Color(room.finishes.floorColor) : new THREE.Color(0x232a38);
+    
+    // Dynamic physical roughness & metalness based on material category
+    let floorRoughness = 0.55;
+    let floorMetalness = 0.05;
+    const fType = room.finishes?.floorType || 'hardwood_oak';
+    if (fType === 'marble_carrara') {
+      floorRoughness = 0.15;
+      floorMetalness = 0.2;
+    } else if (fType === 'terrazzo' || fType === 'polished_concrete') {
+      floorRoughness = 0.28;
+      floorMetalness = 0.1;
+    } else if (fType.includes('hardwood') || fType === 'dark_wood' || fType === 'herringbone_parquet') {
+      floorRoughness = 0.45;
+      floorMetalness = 0.05;
+    } else if (fType === 'jute_carpet') {
+      floorRoughness = 0.95;
+      floorMetalness = 0.0;
+    } else if (fType === 'exposed_brick') {
+      floorRoughness = 0.88;
+      floorMetalness = 0.02;
+    }
+
     const floorMat = new THREE.MeshStandardMaterial({
       color: floorColor,
-      roughness: room.finishes?.floorType?.includes('hardwood') ? 0.45 : 0.65,
-      metalness: 0.1,
+      roughness: floorRoughness,
+      metalness: floorMetalness,
     });
     const floor = new THREE.Mesh(floorGeom, floorMat);
     floor.rotation.x = -Math.PI / 2;
@@ -506,15 +528,33 @@ export const ThreeViewer: React.FC<ThreeViewerProps> = ({
     const wallHeight = room.height || 260;
     const wallThick = room.wallThickness || 15;
     const wallColor = room.finishes?.wallColor ? new THREE.Color(room.finishes.wallColor) : new THREE.Color(0x2d3748);
+    
+    let wallRoughness = 0.75;
+    if (room.finishes?.wallFinish === 'limewash') wallRoughness = 0.95;
+    else if (room.finishes?.wallFinish === 'textured_plaster') wallRoughness = 0.98;
+    else if (room.finishes?.wallFinish === 'satin') wallRoughness = 0.35;
+    else if (room.finishes?.wallFinish === 'matte') wallRoughness = 0.85;
+
     const wallMat = new THREE.MeshStandardMaterial({
       color: wallColor,
-      roughness: room.finishes?.wallFinish === 'limewash' ? 0.95 : 0.75,
+      roughness: wallRoughness,
       transparent: true,
       opacity: 0.68,
     });
 
+    // Dedicated accent material for North wall if specified
+    let northWallMat = wallMat;
+    if (room.finishes?.accentWallColor) {
+      northWallMat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(room.finishes.accentWallColor),
+        roughness: wallRoughness,
+        transparent: true,
+        opacity: 0.78,
+      });
+    }
+
     // North Wall (Z = -room.length / 2)
-    const northWall = new THREE.Mesh(new THREE.BoxGeometry(room.width + wallThick * 2, wallHeight, wallThick), wallMat);
+    const northWall = new THREE.Mesh(new THREE.BoxGeometry(room.width + wallThick * 2, wallHeight, wallThick), northWallMat);
     northWall.position.set(0, wallHeight / 2, -room.length / 2 - wallThick / 2);
     // South Wall (Z = room.length / 2)
     const southWall = new THREE.Mesh(new THREE.BoxGeometry(room.width + wallThick * 2, wallHeight, wallThick), wallMat);

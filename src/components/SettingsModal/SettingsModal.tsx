@@ -59,7 +59,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     try {
       const status = await checkOllamaConnection(
         settings.ollamaBaseUrl || 'http://localhost:11434',
-        settings.gemmaModel || 'paligemma:3b'
+        settings.gemmaModel || 'gemma3:4b'
       );
       setGemmaStatus(status);
     } finally {
@@ -354,7 +354,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)' }}>
-                    Google Gemma (PaliGemma) Configuration
+                    Google Gemma 3 Vision Configuration
                   </span>
                   <button
                     type="button"
@@ -389,9 +389,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </label>
                     <input
                       type="text"
-                      value={settings.gemmaModel || 'paligemma:3b'}
+                      value={settings.gemmaModel || 'gemma3:4b'}
                       onChange={e => onUpdateSettings({ ...settings, gemmaModel: e.target.value })}
-                      placeholder="paligemma:3b or paligemma"
+                      placeholder="gemma3:4b or paligemma:3b"
                       className="input-field font-mono"
                       style={{ fontSize: '0.75rem', padding: '6px 10px', width: '100%' }}
                     />
@@ -415,11 +415,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <span>Ollama Connected Successfully!</span>
                         </div>
                         <div style={{ color: 'var(--text-muted)', marginTop: '2px' }}>
-                          Target Gemma model &apos;{settings.gemmaModel || 'paligemma:3b'}&apos;: {gemmaStatus.modelInstalled ? '✓ Installed and ready for local vision' : '⚠ Model tag not found in Ollama'}
+                          Target Gemma model &apos;{settings.gemmaModel || 'gemma3:4b'}&apos;: {gemmaStatus.modelInstalled ? '✓ Installed and verified ready for vision inference' : '⚠ Model tag not found in Ollama'}
                         </div>
                         {gemmaStatus.models.length > 0 && (
-                          <div style={{ marginTop: '4px', fontSize: '0.7rem', color: 'var(--text-dim)' }}>
-                            Available models: {gemmaStatus.models.join(', ')}
+                          <div style={{ marginTop: '6px' }}>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>Click to select installed model:</span>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                              {gemmaStatus.models.map(m => (
+                                <button
+                                  key={m}
+                                  type="button"
+                                  onClick={() => onUpdateSettings({ ...settings, gemmaModel: m })}
+                                  className="btn btn-ghost"
+                                  style={{
+                                    fontSize: '0.675rem',
+                                    padding: '2px 6px',
+                                    background: settings.gemmaModel === m ? 'var(--primary-clay)' : 'rgba(255,255,255,0.06)',
+                                    color: settings.gemmaModel === m ? '#fff' : 'var(--text-muted)',
+                                    borderRadius: '4px',
+                                  }}
+                                >
+                                  {m}
+                                </button>
+                              ))}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -437,7 +456,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 )}
 
-                {/* Troubleshooting instructions */}
+                {/* Setup instructions */}
                 <div style={{
                   fontSize: '0.7rem',
                   color: 'var(--text-dim)',
@@ -448,11 +467,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: 'var(--text-muted)' }}>
                     <Terminal size={12} />
-                    <span>Quick Google PaliGemma Setup:</span>
+                    <span>Google Gemma 3 Vision Setup:</span>
                   </div>
-                  <div>1. Pull model: <code style={{ color: '#fde68a' }}>ollama run paligemma:3b</code> or <code style={{ color: '#fde68a' }}>ollama run paligemma</code></div>
-                  <div>2. Allow browser CORS: start with <code style={{ color: '#fde68a' }}>set OLLAMA_ORIGINS=* && ollama serve</code></div>
-                  <div style={{ marginTop: '2px', color: 'var(--text-muted)' }}>License: Gemma Terms of Use / PaliGemma Additional Terms of Use (Google Open Model)</div>
+                  <div>1. Install & run: <code style={{ color: '#fde68a' }}>ollama run gemma3:4b</code> (or <code style={{ color: '#fde68a' }}>ollama run paligemma:3b</code>)</div>
+                  <div>2. Allow browser CORS: start Ollama with <code style={{ color: '#fde68a' }}>set OLLAMA_ORIGINS=* && ollama serve</code></div>
+                  <div style={{ marginTop: '2px', color: 'var(--text-muted)' }}>License: Gemma Terms of Use (Google Open Model)</div>
                 </div>
               </div>
             )}
