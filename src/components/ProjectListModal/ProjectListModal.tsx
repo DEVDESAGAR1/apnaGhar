@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { listSavedProjects, deleteProject } from '../../utils/storage';
-import { X, Plus, FolderOpen, Trash2, Home, Sparkles } from 'lucide-react';
+import { X, Plus, Trash2, Home } from 'lucide-react';
 
 interface ProjectListModalProps {
   isOpen: boolean;

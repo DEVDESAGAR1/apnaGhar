@@ -35,6 +35,21 @@ import type {
   RoomMaterialFinish
 } from '../types/model';
 
+// Mock localStorage for test environment
+const mockStorage: Record<string, string> = {};
+global.localStorage = {
+  getItem: (key: string) => mockStorage[key] || null,
+  setItem: (key: string, val: string) => { mockStorage[key] = val; },
+  removeItem: (key: string) => { delete mockStorage[key]; },
+  clear: () => {
+    for (const key of Object.keys(mockStorage)) {
+      delete mockStorage[key];
+    }
+  },
+  key: (idx: number) => Object.keys(mockStorage)[idx] || null,
+  length: 0,
+};
+
 describe('ApnaGhar (अपना घर) — Whole-Home Intelligence & Multi-Room State Isolation', () => {
   beforeEach(() => {
     localStorage.clear();

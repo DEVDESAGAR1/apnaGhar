@@ -298,13 +298,19 @@ export interface AppSettings {
 
 export interface WholeHomeStyleConfig {
   preferredStyleId?: string;
+  preferredStyle?: string;
   paletteId?: string;
+  sharedPaletteId?: string;
   primaryWallColor?: string;
   accentWallColor?: string;
   trimColor?: string;
   ceilingColor?: string;
   floorType?: FloorType;
+  sharedFloorType?: FloorType;
   floorColor?: string;
+  sharedFloorColor?: string;
+  wallFinish?: WallFinishType;
+  sharedWallFinish?: WallFinishType;
 }
 
 export interface HomeProject {

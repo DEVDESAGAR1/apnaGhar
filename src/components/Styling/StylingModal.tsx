@@ -11,7 +11,6 @@ import type {
 import { 
   CURATED_PALETTES, 
   INTERIOR_STYLES, 
-  PAINT_COLORS, 
   FLOOR_MATERIALS, 
   type ColorFamily, 
   type CuratedPalette, 
@@ -973,6 +972,19 @@ export const StylingModal: React.FC<StylingModalProps> = ({
                   </button>
                 ))}
               </div>
+            )}
+
+            {/* Preserve customized rooms checkbox */}
+            {applyScope !== 'this_room' && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', color: 'var(--text-muted)', cursor: 'pointer', marginLeft: '6px' }}>
+                <input
+                  type="checkbox"
+                  checked={preserveCustom}
+                  onChange={e => setPreserveCustom(e.target.checked)}
+                  style={{ accentColor: 'var(--primary-clay)', cursor: 'pointer' }}
+                />
+                Preserve customized rooms
+              </label>
             )}
           </div>
 

@@ -300,10 +300,73 @@ In [`src/components/PhotoAI/PhotoUploadModal.tsx`](file:///c:/Users/devde/Downlo
 
 ---
 
+---
+
 ## 12. Verification & Test Suite Summary
 
-- **Vitest Suites**: 13 passed (13 total).
-- **Automated Tests**: 86 passed (86 total).
+- **Vitest Suites**: 14 passed (14 total).
+- **Automated Tests**: 99 passed (99 total).
 - **TypeScript & Build**: Passed with exit code 0 (`tsc -b && vite build`).
 - **ESLint**: Passed with 0 errors.
-- **Automated Test File Added**: [`src/tests/imageValidationAndReview.test.ts`](file:///c:/Users/devde/Downloads/first/src/tests/imageValidationAndReview.test.ts) (18 tests covering file validation, semantic suitability, unsuitable suppression, existing furniture review, personalized goals, and geometry constraints).
+
+---
+
+## 13. Whole-Home Intelligence, Design System, Gemma 3 Vision & Image Validation Repair (Phases 1–10)
+
+### 13.1 Whole House Root Cause Analysis & Multi-Room Isolation Fix
+- **Root Cause 1 (Destructive State Bleed)**: In `src/utils/storage.ts`, `saveProject(project)` contained logic that assigned `project.room = activeRoom` and then mutated all rooms in `project.rooms` using the active room's state, causing every room in the home to be overwritten with the currently open room's layout upon save or switch.
+- **Root Cause 2 (Storage Key Collisions)**: Projects were serialized under a single static key (`apnaghar_active_home`). Switching projects or reloading overwrote active work.
+- **Fix Implemented**:
+  - Completely isolated room state in `project.rooms`. The active room is updated strictly in place by matching `r.id === updatedRoom.id`.
+  - Implemented isolated per-project storage: `apnaghar_project_<id>`, accompanied by an index in `apnaghar_home_list`.
+  - Added dedicated CRUD actions in `storage.ts`: `loadProjectById()`, `deleteProject()`, `renameRoomInHome()`, `reorderRoomsInHome()`, `duplicateRoomInHome()`.
+  - Preserved sample fixtures as immutable templates that clone into editable user projects upon customization.
+
+### 13.2 Whole-Home Dashboard & Room Management
+- Integrated inline room renaming, room reordering (Move Up / Move Down), room duplication, and safe room deletion with confirmation dialogs in `HomeOverviewModal.tsx`.
+- Handled empty states gracefully when a home has 0 rooms.
+- Added live whole-home metrics: total room count, aggregated floor area (m² and sq ft), and total furniture pieces.
+
+### 13.3 Expanded Design System (64 Paints, 16 Palettes, 24 Styles, 14 Floors)
+- **64 Architectural Paint Colors**: Spanning 10 curated families (`whites`, `neutrals`, `earth_tones`, `greens`, `blues`, `pinks`, `purples`, `yellows`, `dark_accents`, `natural_shades`) with search, family filter chips, lightness/tone tags, and targeted surface application (`wallColor`, `accentWallColor`, `ceilingColor`, `trimColor`, `cabinetryColor`).
+- **16 Curated Multi-Surface Palettes**: Professional specifications (Warm Neutral, Contemporary Indian, Earthy Terracotta, Sage and Cream, Coastal Blue, Japandi Natural, Scandinavian Light, Modern Monochrome, Olive and Walnut, Muted Pastels, Jewel-Tone Luxury, Warm Minimalist, Soft Pink and Sand, Charcoal and Brass, Nature Inspired, Custom Palette) mapping compatible primary wall, accent wall, ceiling, trim, furniture accents, paired floor types, and wall finishes.
+- **24 Architectural Interior Design Styles**: Complete styling guidance (Contemporary Indian, Modern Indian, Traditional Indian, Warm Minimalist, Scandinavian, Japandi, Modern Contemporary, Modern Luxury, Industrial, Mid-Century Modern, Bohemian, Coastal, Mediterranean, Rustic, Farmhouse, Art Deco, Classic European, Transitional, Eclectic, Organic Modern, Wabi-Sabi, Tropical Modern, Minimalist, Traditional Classic) with aesthetic metadata, color palettes, and material preferences.
+- **14 Physical Flooring Materials**: Blonde Oak, Walnut, Ash, Smoked Wenge, Eco Bamboo, Herringbone Parquet, Limestone, Carrara Marble, Venetian Terrazzo, Slate Paving, Polished Concrete, Exposed Brick, Jute/Sisal, and Ceramic Tile with physical roughness and metalness tokens.
+
+### 13.4 2D & 3D Surface Rendering Connection
+- **2D Canvas Planner**: Connected `room.finishes.floorColor`, material texture rendering patterns (herringbone chevron, parquet planks, 60x60 tile grid, and brick running bonds), `wallColor`, and a dedicated accent line on the North focal wall.
+- **3D Three.js Viewport**: Connected `wallColor`, `wallFinish` roughness/sheen (matte 0.85, satin 0.35, limewash 0.95, textured plaster 0.98), floor PBR properties (marble roughness 0.15/metalness 0.2, terrazzo 0.28/0.1, hardwood 0.45/0.05, concrete 0.65/0.02, jute 0.95), and rendered an independent 3D material for the North accent wall.
+
+### 13.5 Whole-Home Styling Consistency & Scope Control
+- Added scope options in `StylingModal.tsx`:
+  - **This Room**: Updates only the active room.
+  - **Whole Home**: Applies styling across all rooms in the home project.
+  - **Select Rooms**: Applies styling to user-selected rooms via multi-select pills.
+- Added explicit **"Preserve customized rooms"** protection, ensuring rooms with personalized designs are not inadvertently overwritten during whole-home updates.
+
+### 13.6 Google Gemma 3 Vision AI (`gemma3:4b`) & Ollama Integration
+- Replaced outdated `paligemma:3b` default with **Google Gemma 3 Vision (`gemma3:4b`)** running natively in Ollama.
+- Verified live inference with Ollama (`http://localhost:11434`): successfully returns valid JSON structured output for indoor scenes with dimension clamping and room bounds validation.
+- Added dynamic model discovery via `/api/tags` in `SettingsModal.tsx`, allowing users to see and select all installed Ollama vision models.
+
+### 13.7 Image Validation & Selfie Rejection
+- Enforced strict two-stage image validation:
+  1. *Stage A*: File format, decoding integrity, dimensions, and size limits.
+  2. *Stage B*: Local vision AI semantic suitability assessment (`suitable`, `partially_suitable`, `unsuitable`, `uncertain`, `ai_unavailable`).
+- **Selfie / Portrait Blocking**: Selfies and non-room photos are classified as `unsuitable`. All furniture detection generation, room recommendations, and measurement checklists are strictly suppressed, and a clear "Upload another image" prompt is shown.
+- **Eliminated Fake Rule-Based Detections**: Rule-based proposals are no longer passed into semantic checks as camera labels, preventing synthetic labels like "sofa" from tricking the system into accepting a selfie.
+
+### 13.8 Dual Onboarding Pathways
+- **✨ Design My Room**: Real-world photo capture/upload, validation, Gemma 3 vision analysis, furniture review, and 2D/3D planning.
+- **🏠 Explore Sample Rooms**: Direct access to curated demonstration rooms (**Shanti Niwas**) without requiring photos or AI inference, clearly labeled as `SAMPLE / DEMO`.
+
+### 13.9 Automated Verification Results
+```
+Test Files  14 passed (14)
+     Tests  99 passed (99)
+  Duration  2.53s
+```
+- Zero TypeScript errors (`tsc -b`).
+- Zero ESLint errors.
+- Clean production bundle (`dist/index.html`, `dist/assets/index-*.js`, `dist/assets/index-*.css`).
+

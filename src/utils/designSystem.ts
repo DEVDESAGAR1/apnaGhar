@@ -120,24 +120,28 @@ export const PAINT_COLORS: PaintColor[] = [
   { id: 'p_muted_coral', name: 'Muted Coral Sand', hex: '#D99182', family: 'pinks', usageTags: ['accent'], tone: 'warm', lightness: 'mid', description: 'Gentle tropical terracotta-pink warming up contemporary seating.' },
   { id: 'p_rosewood', name: 'Heritage Rosewood', hex: '#824E4E', family: 'pinks', usageTags: ['accent', 'cabinetry'], tone: 'warm', lightness: 'dark', description: 'Dignified Victorian rose-brown offering timeless grandeur.' },
   { id: 'p_peach_cream', name: 'Peach Cream', hex: '#FAE3D9', family: 'pinks', usageTags: ['wall', 'ceiling'], tone: 'warm', lightness: 'light', description: 'Sunny nectar glow ideal for cozy breakfasts and sunrooms.' },
+  { id: 'p_terracotta_rose', name: 'Terracotta Rose', hex: '#B86F63', family: 'pinks', usageTags: ['wall', 'accent'], tone: 'warm', lightness: 'mid', description: 'Sun-warmed pink clay bridging terracotta and dusty rose.' },
 
   // 7. Purples
   { id: 'pu_lavender', name: 'French Lavender', hex: '#D3CFE2', family: 'purples', usageTags: ['wall', 'accent'], tone: 'cool', lightness: 'light', description: 'Relaxing herbal purple encouraging restorative sleep.' },
   { id: 'pu_mauve', name: 'Heather Mauve', hex: '#A899A5', family: 'purples', usageTags: ['wall', 'accent'], tone: 'neutral', lightness: 'mid', description: 'Smoky, sophisticated mauve bridging warm neutrals and cool grays.' },
   { id: 'pu_plum', name: 'Midnight Plum', hex: '#4B384C', family: 'purples', usageTags: ['accent', 'cabinetry'], tone: 'cool', lightness: 'dark', description: 'Sumptuous velvety dark violet creating glamorous jewel-box powder rooms.' },
   { id: 'pu_violet', name: 'Muted Violet Ash', hex: '#877B8A', family: 'purples', usageTags: ['accent', 'wall'], tone: 'cool', lightness: 'mid', description: 'Understated ash violet favored in Scandinavian minimalist interiors.' },
+  { id: 'pu_wisteria', name: 'Wisteria Mist', hex: '#E6E1EE', family: 'purples', usageTags: ['wall', 'ceiling'], tone: 'cool', lightness: 'light', description: 'Delicate pale lilac mist bringing soft romantic luminosity.' },
 
   // 8. Yellows
   { id: 'y_butter', name: 'Morning Butter', hex: '#FDF1C9', family: 'yellows', usageTags: ['wall', 'ceiling'], tone: 'warm', lightness: 'light', description: 'Delicate morning light infusing vitality without saturation fatigue.' },
   { id: 'y_mustard', name: 'Dijon Mustard', hex: '#CFA145', family: 'yellows', usageTags: ['accent'], tone: 'warm', lightness: 'mid', description: 'Mid-century retro mustard that anchors modern neutral seating.' },
   { id: 'y_ochre', name: 'Marigold Ochre', hex: '#D49B35', family: 'yellows', usageTags: ['accent', 'wall'], tone: 'warm', lightness: 'mid', description: 'Celebratory Indian marigold bringing festival warmth into living rooms.' },
   { id: 'y_saffron', name: 'Kashmiri Saffron', hex: '#E08D2C', family: 'yellows', usageTags: ['accent'], tone: 'warm', lightness: 'mid', description: 'Precious warm golden glow celebrating artisanal luxury.' },
+  { id: 'y_honey', name: 'Wild Honeycomb', hex: '#EBB059', family: 'yellows', usageTags: ['accent', 'cabinetry'], tone: 'warm', lightness: 'mid', description: 'Golden warm honey adding warmth to breakfast corners.' },
 
   // 9. Dark Accents
   { id: 'd_deep_brown', name: 'Roasted Cacao', hex: '#3E2723', family: 'dark_accents', usageTags: ['accent', 'cabinetry', 'trim'], tone: 'warm', lightness: 'dark', description: 'Rich dark espresso bean for grounding door frames and mouldings.' },
   { id: 'd_espresso', name: 'Architectural Espresso', hex: '#2A201A', family: 'dark_accents', usageTags: ['cabinetry', 'accent'], tone: 'warm', lightness: 'dark', description: 'Nearly black wood tone providing high architectural contrast.' },
   { id: 'd_graphite', name: 'Graphite Metal', hex: '#24292E', family: 'dark_accents', usageTags: ['trim', 'accent', 'cabinetry'], tone: 'cool', lightness: 'dark', description: 'Precision industrial charcoal used for black metal door frames.' },
   { id: 'd_ink_black', name: 'Carbon Ink Black', hex: '#16191D', family: 'dark_accents', usageTags: ['trim', 'accent'], tone: 'neutral', lightness: 'dark', description: 'Pure architectural silhouette black for crisp modern delineation.' },
+  { id: 'd_peat', name: 'Smoked Peat', hex: '#362B28', family: 'dark_accents', usageTags: ['trim', 'cabinetry'], tone: 'warm', lightness: 'dark', description: 'Deep smoky earth brown providing organic architectural grounding.' },
 
   // 10. Natural Shades
   { id: 'nat_walnut', name: 'American Walnut', hex: '#5C4033', family: 'natural_shades', usageTags: ['cabinetry', 'accent'], tone: 'warm', lightness: 'dark', description: 'Warm lustrous hardwood tone for custom bespoke joinery.' },
@@ -146,6 +150,7 @@ export const PAINT_COLORS: PaintColor[] = [
   { id: 'nat_jute', name: 'Raw Natural Jute', hex: '#B89B72', family: 'natural_shades', usageTags: ['wall', 'accent'], tone: 'warm', lightness: 'mid', description: 'Textured organic fiber tone for earthy floor rugs and wall tapestries.' },
   { id: 'nat_linen', name: 'Bleached Linen', hex: '#EAE6DF', family: 'natural_shades', usageTags: ['wall', 'ceiling', 'trim'], tone: 'neutral', lightness: 'light', description: 'Effortless textured neutral for light-filtering drapery and open living.' },
   { id: 'nat_sandstone', name: 'Dholpur Sandstone', hex: '#DCC3A8', family: 'natural_shades', usageTags: ['wall', 'accent'], tone: 'warm', lightness: 'mid', description: 'Heritage Indian pink-buff sandstone reminiscent of Rajasthani palaces.' },
+  { id: 'nat_teak', name: 'Burma Teak', hex: '#7D5137', family: 'natural_shades', usageTags: ['cabinetry', 'accent'], tone: 'warm', lightness: 'dark', description: 'Historic golden-brown teak grain celebrated in Indian architecture.' },
 ];
 
 // -------------------------------------------------------------

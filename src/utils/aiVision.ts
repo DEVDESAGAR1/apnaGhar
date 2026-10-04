@@ -4,6 +4,7 @@ import type {
   AiProviderType, 
   FurnitureItem,
   ImageValidationResult,
+  ImageSuitability,
   DetailedRoomAnalysis,
   ExistingFurnitureReviewItem,
   PersonalizedRecommendation,

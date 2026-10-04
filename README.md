@@ -37,10 +37,12 @@ Built with a **local-first, privacy-by-default** philosophy:
 - **PBR Material Finishes**: Synchronizes wall colors, surface finishes (matte, satin, limewash), and flooring materials (hardwood oak, walnut, herringbone parquet, polished concrete, limestone, terrazzo).
 - **Camera Presets**: Instant switching between Isometric (45°), Top-Down Orthographic, and Eye-Level Walkthrough perspectives.
 
-### 4. Interior Styling & Design Variants
-- **Curated Palette**: Warm Alabaster, Limewash Stone, Muted Sage, Terracotta Clay, Soft Linen, and Charcoal Slate.
-- **Artisanal Flooring**: Natural Oak, Rich Walnut, Herringbone Parquet, Polished Concrete, Limestone Tile, and Venetian Terrazzo.
-- **Design Variants Manager**: Save alternative layout and color proposals (e.g. "Option A — Cozy Layout" vs "Option B — Open Concept") for any room and switch between them with a single click.
+### 4. Interior Styling & Expanded Design System
+- **Curated Architectural Palettes (16+)**: Warm Neutral Sanctuary, Contemporary Indian, Earthy Terracotta, Sage Plaster & Sweet Cream, Calm Coastal Haze, Japandi Balance, Scandinavian Light, Modern Monochrome, Tuscan Olive & Walnut, Muted Pastels, Jewel-Tone Grandeur, Warm Minimalist Studio, Soft Blush & Desert Sand, Charcoal Slate & Brass, Nature Inspired Biophilia, and Custom Atelier.
+- **Architectural Paint Collection (64 Shades)**: Curated across 10 families (Whites, Neutrals, Earth Tones, Greens, Blues, Pinks, Purples, Yellows, Dark Accents, and Natural Shades) with search, tone tags, and multi-surface application (Primary Wall, Accent Wall, Ceiling, Trim, and Cabinetry).
+- **Physical Flooring Materials (14+)**: Natural Blonde Oak, Architectural Walnut, Pale Ash, Smoked Wenge, Eco Bamboo, Herringbone Parquet, Limestone Tile, Carrara Marble, Venetian Terrazzo, Slate Paving, Polished Concrete, Industrial Exposed Brick, Raw Jute / Sisal, and Artisan Ceramic Tile with physical roughness and metalness tokens.
+- **Interior Design Styles (24 Architectural Styles)**: Contemporary Indian, Modern Indian, Traditional Indian, Warm Minimalist, Scandinavian, Japandi, Modern Contemporary, Modern Luxury, Industrial Loft, Mid-Century Modern, Bohemian Chic, Calm Coastal, Mediterranean Villa, Rustic Warmth, Modern Farmhouse, Art Deco Glamour, Classic European, Transitional Harmony, Eclectic Curator, Organic Modern, Wabi-Sabi, Tropical Modern, Pure Minimalist, and Traditional Classic.
+- **Whole-Home Styling Engine**: Apply styles and palettes with explicit scope control: "This Room", "Whole Home", or "Select Rooms", with explicit protection for customized rooms.
 
 ### 5. Rigorous Computational Fit Engine
 - **Separating Axis Theorem (SAT)**: Accurate 2D Oriented Bounding Box (OBB) collision math between arbitrarily rotated furniture items.
@@ -53,12 +55,12 @@ Built with a **local-first, privacy-by-default** philosophy:
 - **Mandatory Safety Disclaimer**:
   > *"Passing a room geometry check does not guarantee successful delivery, installation, structural safety, or compliance with building codes."*
 
-### 6. Local Google Gemma Vision & Ollama Vision AI
-- **Google Gemma Vision (PaliGemma)**: On-device visual spatial detection using Google's open vision-language model (`paligemma:3b` / `paligemma2:3b`). Combines a SigLIP vision encoder with a Gemma autoregressive decoder under the Google Gemma Terms of Use. Supports native location token parsing (`<locYYYY><locXXXX>`) and structured JSON suggestions.
-- **Local Open-Source Vision via Ollama**: Supports running LLaVA 1.6 (Apache 2.0) and Llama 3.2 Vision locally via Ollama's REST API. Zero cloud data transmission.
-- **Built-in Offline Heuristics**: 100% in-browser spatial perspective engine available with zero setup or downloads.
-- **Live Connection Tester**: Diagnostic test buttons in Settings check Ollama reachability, installed model tags, and CORS setup.
-- **Defensive Parsing & Clamping**: Automatically validates model output, parses PaliGemma `<loc>` tokens or JSON, strips markdown fences, and clamps dimensions to physical centimeter limits.
+### 6. Local Google Gemma 3 Vision AI & Ollama Integration
+- **Google Gemma 3 Vision (`gemma3:4b`)**: On-device visual spatial detection using Google's open vision-language model (`gemma3:4b`) running natively in Ollama. Uses native structured JSON response format with strict room dimension injection.
+- **Two-Stage Semantic Image Validation**: Strictly separates low-level image file validation from semantic room suitability. Detects and rejects selfies, portraits, and non-room images, preventing hallucinated furniture detections.
+- **Honest AI Diagnostics & Fallback**: When AI inference is unavailable or an image is classified as unsuitable, suggestions are cleanly cleared rather than fabricating fake furniture from rule-based stubs or falling back to cloud APIs.
+- **Dynamic Model Discovery**: Queries Ollama's `/api/tags` to list installed models directly in Settings with one-click selection.
+- **Defensive Parsing & Clamping**: Automatically validates model output, parses Gemma 3 structured JSON, strips markdown fences, and clamps dimensions to physical centimeter limits.
 - **Provenance Tracking**: Every dimension records its source (`manual`, `catalog`, `photo-estimate`, `ai-suggestion`) and confirmation state.
 - **Safe Export & Purge**: Photos are excluded from JSON exports by default, and can be permanently purged with one click.
 
@@ -147,22 +149,24 @@ npm test
 ```
  RUN  v5.0.3 C:/Users/devde/Downloads/first
 
- ✓ src/tests/mediaCaptureAndKeyframes.test.ts (5 tests)
- ✓ src/tests/gemmaVision.test.ts (8 tests)
- ✓ src/tests/storageAndPrivacy.test.ts (5 tests)
- ✓ src/tests/fitEngine.test.ts (7 tests)
- ✓ src/tests/ollamaAi.test.ts (9 tests)
- ✓ src/tests/homeProject.test.ts (9 tests)
- ✓ src/tests/geometry.test.ts (9 tests)
- ✓ src/tests/modelConsistency.test.ts (3 tests)
- ✓ src/tests/units.test.ts (3 tests)
  ✓ src/tests/aiVisionOffline.test.ts (2 tests)
+ ✓ src/tests/gemmaVision.test.ts (8 tests)
+ ✓ src/tests/homeProject.test.ts (9 tests)
+ ✓ src/tests/imageValidationAndReview.test.ts (18 tests)
+ ✓ src/tests/ollamaAi.test.ts (9 tests)
+ ✓ src/tests/wholeHomeAndDesignSystem.test.ts (13 tests)
+ ✓ src/tests/storageAndPrivacy.test.ts (5 tests)
+ ✓ src/tests/geometry.test.ts (9 tests)
+ ✓ src/tests/mediaCaptureAndKeyframes.test.ts (5 tests)
+ ✓ src/tests/fitEngine.test.ts (7 tests)
+ ✓ src/tests/modelConsistency.test.ts (3 tests)
  ✓ src/tests/photoUploadModalHooks.test.tsx (4 tests)
+ ✓ src/tests/units.test.ts (3 tests)
  ✓ src/tests/spatialAndThemes.test.ts (4 tests)
 
- Test Files  12 passed (12)
-      Tests  68 passed (68)
-   Duration  1.54s
+ Test Files  14 passed (14)
+      Tests  99 passed (99)
+   Duration  2.53s
 ```
 
 ### Production Build Verification
@@ -178,9 +182,9 @@ Builds cleanly with `0` errors via `tsc -b && vite build`.
 ApnaGhar is built for Hacktoberfest and the Google Gemma Open Model Challenge under the following verified technical criteria:
 
 1. **Genuinely Open-Source & Privacy-First**: 100% of spatial planning, computational geometry, and local AI run on-device. No telemetry, no hidden trackers.
-2. **Real Google Gemma Integration**: Direct integration with Google's PaliGemma open vision-language model (`paligemma:3b`) via local Ollama runtime. Transparently documents licensing (Google Gemma Terms of Use / PaliGemma Additional Terms of Use), hardware requirements, and prompt architectures.
+2. **Real Google Gemma Integration**: Direct integration with Google's Gemma 3 Vision open model (`gemma3:4b`) via local Ollama runtime. Transparently documents licensing (Google Gemma Terms of Use), hardware requirements, and prompt architectures.
 3. **Deterministic Geometric Authority**: Vision suggestions are never used to hallucinate room dimensions or bypass physical fit validation. Separating Axis Theorem (SAT) collision math and door sweeps are the sole authority.
-4. **Verifiable Quality**: 68 automated tests across 12 test suites, zero TypeScript errors (`tsc -b`), zero ESLint errors (`oxlint`). Transparent reporting distinguishes mocked test suites from local model weight availability.
+4. **Verifiable Quality**: 99 automated tests across 14 test suites, zero TypeScript errors (`tsc -b`), zero ESLint errors. Transparent reporting distinguishes mocked test suites from local model weight availability.
 
 ---
 

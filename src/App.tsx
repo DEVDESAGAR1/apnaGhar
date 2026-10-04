@@ -342,10 +342,11 @@ export const App: React.FC = () => {
   const handleApplyWholeHomeStyling = useCallback((
     stylingConfig: WholeHomeStyleConfig,
     targetRoomIds?: string[],
-    preserveCustomizedRooms?: boolean
+    _preserveCustomizedRooms?: boolean
   ) => {
     setProject(prev => {
-      const updated = applyWholeHomeStyling(prev, stylingConfig, targetRoomIds, preserveCustomizedRooms);
+      const scope = targetRoomIds && targetRoomIds.length > 0 ? 'selected' : 'all';
+      const updated = applyWholeHomeStyling(prev, stylingConfig, scope, targetRoomIds);
       saveProject(updated);
       return updated;
     });

@@ -18,7 +18,7 @@ import {
  * ApnaGhar Geometric Evaluation Engine
  * Pure logic independent of any AI or rendering framework.
  */
-export function evaluateRoomFit(room: RoomModel, furniture: FurnitureItem[]): FitReport {
+export function evaluateRoomFit(room: RoomModel, furniture: FurnitureItem[] = room?.furniture || []): FitReport {
   const checks: SpatialCheckItem[] = [];
 
   // 1. Room Dimension Validity Check

@@ -706,12 +706,48 @@ export function reorderRoomsInHome(project: HomeProject, orderedRoomIds: string[
 export function applyWholeHomeStyling(
   project: HomeProject,
   config: import('../types/model').WholeHomeStyleConfig,
-  scope: 'all' | 'selected' = 'all',
-  targetRoomIds?: string[]
+  scopeOrTargets: 'all' | 'selected' | string[] | undefined = 'all',
+  targetRoomIdsOrPreserve?: string[] | boolean,
+  preserveCustomized?: boolean
 ): HomeProject {
+  let scope: 'all' | 'selected' = 'all';
+  let targetRoomIds: string[] | undefined;
+  let preserve = Boolean(preserveCustomized);
+
+  if (Array.isArray(scopeOrTargets)) {
+    scope = 'selected';
+    targetRoomIds = scopeOrTargets;
+    if (typeof targetRoomIdsOrPreserve === 'boolean') {
+      preserve = targetRoomIdsOrPreserve;
+    }
+  } else if (scopeOrTargets === 'selected') {
+    scope = 'selected';
+    if (Array.isArray(targetRoomIdsOrPreserve)) {
+      targetRoomIds = targetRoomIdsOrPreserve;
+    }
+  } else {
+    scope = 'all';
+    if (typeof targetRoomIdsOrPreserve === 'boolean') {
+      preserve = targetRoomIdsOrPreserve;
+    } else if (Array.isArray(targetRoomIdsOrPreserve)) {
+      targetRoomIds = targetRoomIdsOrPreserve;
+      scope = 'selected';
+    }
+  }
+
   const targets = new Set(scope === 'all' ? project.rooms.map(r => r.id) : (targetRoomIds || []));
+  const floorType = config.floorType || config.sharedFloorType;
+  const floorColor = config.floorColor || config.sharedFloorColor;
+  const wallFinish = config.wallFinish || config.sharedWallFinish;
+  const paletteId = config.paletteId || config.sharedPaletteId;
+  const styleId = config.preferredStyleId || config.preferredStyle;
+
   const updatedRooms = project.rooms.map(room => {
     if (!targets.has(room.id)) return room;
+    const isCustomized = (room as any).isCustomized || (room.finishes as any)?.isCustomized;
+    if (preserve && isCustomized) {
+      return room;
+    }
     return {
       ...room,
       finishes: {
@@ -720,10 +756,11 @@ export function applyWholeHomeStyling(
         accentWallColor: config.accentWallColor || room.finishes.accentWallColor,
         trimColor: config.trimColor || room.finishes.trimColor,
         ceilingColor: config.ceilingColor || room.finishes.ceilingColor,
-        floorType: config.floorType || room.finishes.floorType,
-        floorColor: config.floorColor || room.finishes.floorColor,
-        paletteId: config.paletteId || room.finishes.paletteId,
-        styleId: config.preferredStyleId || room.finishes.styleId,
+        wallFinish: wallFinish || room.finishes.wallFinish,
+        floorType: floorType || room.finishes.floorType,
+        floorColor: floorColor || room.finishes.floorColor,
+        paletteId: paletteId || room.finishes.paletteId,
+        styleId: styleId || room.finishes.styleId,
       },
     };
   });
